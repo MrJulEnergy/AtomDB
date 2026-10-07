@@ -39,6 +39,19 @@ target cannot represent are listed; the conversion is refused (exit 6, `data_los
 unless `--allow-loss`. Output files are never overwritten without `--overwrite`. If a
 store exists, the conversion is recorded (`CNV-…`) and the output stored.
 
+### `atomdb whatis PATH [--max-frames N]`
+Identify an unknown file. Evidence, strongest first:
+1. **exact match** — sha256 equals a stored file (shows datasets and every original location)
+2. **stamp** — `/atomdb` group in H5MD files written by atomdb (dataset, source file, software)
+3. **content** — structure fingerprints of up to N frames match indexed frames; reports
+   matching dataset, frame ranges and whether coordinates were confirmed. Works for
+   re-saved, converted, subsampled or concatenated copies.
+
+### `atomdb link ID [DEST] [--original]`
+Symlink a dataset's canonical H5MD (or original file with `--original`) from the store
+to `DEST` (directory or file path). Store files are read-only. Existing paths are never
+replaced. Links are recorded so `validate` can find dangling ones.
+
 ### `atomdb formats`
 Supported formats and their capabilities.
 

@@ -81,7 +81,7 @@ def get_temperature(atoms: ase.Atoms) -> tuple[float | None, str | None]:
 
 
 def volume(atoms: ase.Atoms) -> float | None:
-    if not atoms.cell.rank == 3:
+    if atoms.cell.rank != 3:
         return None
     v = abs(float(atoms.cell.volume))
     return v if v > 0 else None
@@ -98,7 +98,7 @@ def formula(numbers: np.ndarray) -> str:
 
 def element_mask(numbers) -> tuple[int, int]:
     lo = hi = 0
-    for z in set(int(z) for z in numbers):
+    for z in {int(z) for z in numbers}:
         if 1 <= z <= LO_BITS:
             lo |= 1 << (z - 1)
         elif z > LO_BITS:

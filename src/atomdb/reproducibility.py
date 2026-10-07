@@ -20,13 +20,13 @@ def atomdb_git_commit() -> str | None:
     try:
         out = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=5, check=False,
         )
         if out.returncode != 0:
             return None
         dirty = subprocess.run(
             ["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=5, check=False,
         ).stdout.strip()
         return out.stdout.strip() + ("-dirty" if dirty else "")
     except (OSError, subprocess.SubprocessError):

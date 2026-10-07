@@ -69,3 +69,17 @@ def test_cli_import_type_map(home, data_dir):
     res = run("import", str(data_dir / "kcl.dump"), "--type-map", "1=K,2=Cl", "--json")
     assert res.exit_code == 0, res.output
     assert json.loads(res.output)["data"][0]["dataset"]["elements"] == ["Cl", "K"]
+
+
+def test_cli_link_and_whatis(home, data_dir, tmp_path):
+    run("init")
+    ds = json.loads(run("import", str(data_dir / "kcl_labeled.extxyz"), "--json").output)
+    ds_id = ds["data"][0]["dataset"]["id"]
+    res = run("link", ds_id, str(tmp_path), "--json")
+    assert res.exit_code == 0, res.output
+    link = tmp_path / "kcl_labeled.h5"
+    assert link.is_symlink() and link.resolve().is_relative_to(home)
+    res = run("link", ds_id, str(tmp_path / "orig.extxyz"), "--original", "--json")
+    assert (tmp_path / "orig.extxyz").read_bytes() == (data_dir / "kcl_labeled.extxyz").read_bytes()
+    w = json.loads(run("whatis", str(link), "--json").output)["data"]
+    assert w["exact_match"]["datasets"][0]["id"] == ds_id

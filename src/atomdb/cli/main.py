@@ -8,6 +8,8 @@ from typing import Annotated
 import typer
 
 from .. import __version__
+from ..db.models import Dataset, File
+from ..errors import InvalidInput
 from ..services import AtomDB
 from ..services import datasets as dsvc
 from ..services.importer import import_file, import_raw
@@ -133,6 +135,78 @@ def convert(
             print(f"  recorded as {r['conversion_id']}")
 
     emit(r, human)
+
+
+@app.command()
+@handle_errors
+def whatis(
+    path: Path,
+    max_frames: Annotated[int, typer.Option(help="Frames to fingerprint at most.")] = 5000,
+    json_: JsonOpt = False,
+):
+    """Identify an unknown file: exact checksum, embedded stamp, or matching frames."""
+    from ..services.whatis import whatis as do_whatis
+
+    _json(json_)
+    r = do_whatis(open_db(), path, max_frames=max_frames)
+
+    def human(r):
+        print(f"{r['path']}")
+        print(f"  sha256 {r['sha256']}  ({r['size_bytes']} B, format {r['format'] or '?'}, "
+              f"{r['n_frames'] if r['n_frames'] is not None else '?'} frames)")
+        print(f"  VERDICT: {r['verdict']}")
+        if r["exact_match"]:
+            em = r["exact_match"]
+            print(f"  exact match: {em['file']['id']} stored at {em['file']['store_path']}")
+            for d in em["datasets"]:
+                print(f"    dataset {d['id']}  {d['name']}")
+            for o in em["file"]["origins"]:
+                print(f"    imported from {o['hostname']}:{o['original_path']} at {o['imported_at']}")
+        if r["stamp"]:
+            st = r["stamp"]
+            print("  embedded atomdb stamp:")
+            for k in ("dataset_id", "exported_from_dataset", "source_name", "source_path",
+                      "source_sha256", "created_at", "same_instance"):
+                if st.get(k) not in (None, ""):
+                    print(f"    {k}: {st[k]}")
+        for m in r["content_matches"]:
+            d = m["dataset"]
+            print(f"  content: {m['matched_frames']}/{r['frames_checked']} checked frames match "
+                  f"{d['id']} ({d['name']}) frames {m['dataset_frames']}"
+                  f"{'  [coordinates confirmed]' if m['coordinates_confirmed'] else ''}")
+        if r["exact_match"] or r["content_matches"]:
+            print("  next: atomdb provenance <ID> --up   (full history)")
+
+    emit(r, human)
+
+
+@app.command()
+@handle_errors
+def link(
+    node_id: str,
+    dest: Annotated[Path, typer.Argument(help="Target path or directory.")] = Path("."),
+    original: Annotated[bool, typer.Option(help="Link the original file instead of H5MD.")] = False,
+    json_: JsonOpt = False,
+):
+    """Create a read-only symlink to a dataset's file in the store."""
+    from ..store.links import make_link
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        node = dsvc.get_node(s, node_id)
+        if isinstance(node, File):
+            f = node
+        elif isinstance(node, Dataset):
+            role = "original" if original else "canonical_h5md"
+            f = next(df.file for df in node.files if df.role == role)
+        else:
+            raise InvalidInput(f"{node.id} is a {node.kind}; link a dataset or file")
+        p = make_link(s, adb.store.abspath(f.store_relpath), f, dest, node.id)
+        adb.audit(s, "link.create", node.id, path=str(p))
+        data = {"link": str(p.absolute()), "target": str(adb.store.abspath(f.store_relpath)),
+                "file_id": f.id}
+    emit(data, lambda d: print(f"{d['link']} -> {d['target']}"))
 
 
 @app.command()

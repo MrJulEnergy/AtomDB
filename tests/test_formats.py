@@ -173,7 +173,7 @@ def test_frame_index_and_masks(adb, data_dir):
             select(Frame).where(Frame.dataset_id == r.dataset.id).order_by(Frame.idx)
         ).scalars().all()
     assert [f.idx for f in frames] == [0, 1, 2, 3]
-    lo, hi = mask_for_symbols(["K", "Cl"])
+    lo, _ = mask_for_symbols(["K", "Cl"])
     assert all((f.elem_mask_lo & lo) == lo for f in frames)
     assert frames[0].temperature == 400.0
     assert frames[0].energy_per_atom == pytest.approx(frames[0].energy / frames[0].n_atoms)

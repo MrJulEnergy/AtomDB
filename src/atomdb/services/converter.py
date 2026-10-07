@@ -18,6 +18,7 @@ from ..db.models import Calculation, File
 from ..db.types import utcnow
 from ..errors import DataLossError, InvalidInput
 from ..formats.base import Capabilities, FormatAdapter
+from ..formats.h5md import write_stamp
 from ..formats.registry import detect, format_for_output, get_adapter
 from ..frames import Catalog
 from ..ids import is_id, new_id
@@ -128,6 +129,16 @@ def convert(
         n_back = len(dst_adapter.open(tmp)) if dst_adapter.readable else n_frames
         if n_back != n_frames:
             raise DataLossError(f"wrote {n_frames} frames but read back {n_back}")
+        if dst_adapter.name == "h5md":
+            write_stamp(tmp, {
+                "exported_from_dataset": ds_id or "",
+                "instance_uuid": adb.db.instance_uuid() if adb else "",
+                "source_sha256": sha256_file(in_path),
+                "source_name": in_path.name,
+                "source_format": src_adapter.name,
+                "created_at": started.isoformat(),
+                "software": software_versions(),
+            })
         os.replace(tmp, out)
     finally:
         if tmp.exists():

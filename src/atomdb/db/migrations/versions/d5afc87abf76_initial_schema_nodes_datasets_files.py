@@ -4,10 +4,10 @@ Revision ID: d5afc87abf76
 Revises: 
 Create Date: 2026-10-07 14:48:51.632204
 """
-from alembic import op
 import sqlalchemy as sa
-import atomdb.db.types
+from alembic import op
 
+import atomdb.db.types
 
 revision = 'd5afc87abf76'
 down_revision = None

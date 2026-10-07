@@ -94,7 +94,7 @@ def test_store_files_are_not_writable_through_symlink(adb, tmp_path):
     src = _write(tmp_path / "x.xyz")
     r = import_file(adb, src)
     stored = adb.store.path_for(r.sha256)
-    with pytest.raises(PermissionError):
-        if os.geteuid() == 0:  # root ignores permissions
-            raise PermissionError
-        open(stored, "a")
+    if os.geteuid() == 0:  # root ignores permissions
+        pytest.skip("running as root")
+    with pytest.raises(PermissionError), open(stored, "a"):
+        pass

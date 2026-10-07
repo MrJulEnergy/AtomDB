@@ -90,7 +90,7 @@ class FrameSource(ABC):
                 return atoms
         raise IndexError(index)
 
-    def close(self) -> None:  # noqa: B027 - optional hook
+    def close(self) -> None:
         pass
 
     def __enter__(self):
