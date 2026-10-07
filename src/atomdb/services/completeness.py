@@ -69,6 +69,14 @@ def completeness(s: Session, ds: Dataset) -> dict:
         "checks": checks, "missing": [m["item"] for m in missing]}
 
 
+def _first_frame_match(s: Session, single: str, traj: str) -> bool:
+    fp = s.execute(select(Frame.fingerprint).where(Frame.dataset_id == single, Frame.idx == 0)
+                   ).scalar_one_or_none()
+    fp0 = s.execute(select(Frame.fingerprint).where(Frame.dataset_id == traj, Frame.idx == 0)
+                    ).scalar_one_or_none()
+    return fp is not None and fp == fp0
+
+
 def suggest_relations(s: Session, ds_id: str | None = None, min_shared: int = 1) -> list[dict]:
     """Datasets sharing structures that are not yet connected in the provenance graph."""
     a, b = aliased(Frame), aliased(Frame)
@@ -95,6 +103,20 @@ def suggest_relations(s: Session, ds_id: str | None = None, min_shared: int = 1)
         if connected:
             continue
         rel = "derived_from" if child.n_frames == parent.n_frames else "sampled_from"
+        if child.n_frames == 1 and (parent.n_frames or 0) > 1 and _first_frame_match(
+                s, child_id, parent_id):
+            # a single structure equal to frame 0 of a trajectory is its starting point:
+            # the trajectory was derived from it, not the other way round
+            out.append({
+                "child": parent_id, "parent": child_id, "relation": "derived_from",
+                "shared_frames": shared, "child_frames": parent.n_frames,
+                "parent_frames": child.n_frames,
+                "reason": f"frame 0 of {parent_id} equals {child_id}: probably its starting "
+                          "structure",
+                "command": f"atomdb relate {parent_id} derived_from {child_id} "
+                           "--role initial_structure",
+            })
+            continue
         out.append({
             "child": child_id, "parent": parent_id, "relation": rel, "shared_frames": shared,
             "child_frames": child.n_frames, "parent_frames": parent.n_frames,

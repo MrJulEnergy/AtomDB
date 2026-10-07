@@ -27,7 +27,7 @@ from .datasets import file_out, summary
 BATCH = 500
 
 
-def _ranges(idxs: list[int]) -> str:
+def _ranges(idxs: list[int], max_segments: int = 20) -> str:
     idxs = sorted(idxs)
     out, start, prev = [], idxs[0], idxs[0]
     for i in idxs[1:] + [None]:
@@ -37,6 +37,8 @@ def _ranges(idxs: list[int]) -> str:
         out.append(f"{start}" if start == prev else f"{start}-{prev}")
         if i is not None:
             start = prev = i
+    if len(out) > max_segments:
+        return ",".join(out[:max_segments]) + f",… ({len(out) - max_segments} more ranges)"
     return ",".join(out)
 
 
@@ -55,7 +57,7 @@ def whatis(adb: AtomDB, path: str | Path, max_frames: int = 5000, confirm: int =
         if f is not None:
             dss = s.execute(
                 select(Dataset).join(DatasetFile, DatasetFile.dataset_id == Dataset.id)
-                .where(DatasetFile.file_id == f.id)
+                .where(DatasetFile.file_id == f.id).distinct()
             ).scalars().all()
             result["exact_match"] = {
                 "file": file_out(adb, f).model_dump(mode="json"),

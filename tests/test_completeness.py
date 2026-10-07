@@ -40,3 +40,15 @@ def test_suggestions_from_shared_frames(adb, data_dir, tmp_path):
             (child, "sampled_from", parent)]
         add_link(s, child, "sampled_from", parent)
         assert suggest_relations(s) == []
+
+
+def test_starting_structure_suggestion(adb, data_dir, tmp_path):
+    frames = ase.io.read(data_dir / "kcl_labeled.extxyz", ":")
+    ase.io.write(tmp_path / "start.extxyz", frames[0])
+    traj = import_file(adb, data_dir / "kcl_labeled.extxyz").dataset.id
+    start = import_file(adb, tmp_path / "start.extxyz").dataset.id
+    with adb.session() as s:
+        sug = suggest_relations(s)
+    assert [(x["child"], x["relation"], x["parent"]) for x in sug] == [
+        (traj, "derived_from", start)]
+    assert "starting structure" in sug[0]["reason"]
