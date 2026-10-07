@@ -14,3 +14,7 @@ atomdb_store/
 *.sqlite-wal
 *.sqlite-shm
 !tests/data/**
+
+# built frontend (run: cd frontend && npm install && npm run build)
+src/atomdb/web/static/*
+!src/atomdb/web/static/.gitkeep

@@ -1,0 +1,38 @@
+:root {
+  --bg: #fafafa; --fg: #1d1f21; --muted: #6b7075; --line: #d9dcdf; --panel: #ffffff;
+  --accent: #1f5f99; --accent-weak: #e6eef6; --bad: #b3261e; --dim: #c8cbce;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #16181a; --fg: #e3e5e7; --muted: #9097a0; --line: #30353a; --panel: #1e2124;
+          --accent: #7fb2e5; --accent-weak: #22303d; --bad: #f2867d; --dim: #3a3f44; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.topbar { display: flex; gap: 24px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.brand { font-weight: 700; letter-spacing: 0.02em; }
+.topbar nav { display: flex; gap: 16px; }
+.topbar nav a.active { font-weight: 600; text-decoration: underline; }
+main { padding: 16px; max-width: 1600px; }
+h1 { font-size: 18px; margin: 4px 0 12px; }
+h2 { font-size: 14px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.small { font-size: 12px; }
+.muted { color: var(--muted); }
+.error { color: var(--bad); }
+table.grid { border-collapse: collapse; width: 100%; background: var(--panel); }
+table.grid th, table.grid td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+table.grid th { font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+table.grid tr:hover td { background: var(--accent-weak); }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.panel { background: var(--panel); border: 1px solid var(--line); padding: 12px; }
+.panel.wide { grid-column: span 2; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; }
+.badge { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 3px; font-size: 12px; }
+.file { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+@media (max-width: 700px) { .panel.wide { grid-column: span 1; } }

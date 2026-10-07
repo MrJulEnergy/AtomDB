@@ -17,3 +17,13 @@ uv run pytest
 - Tests use a temporary `ATOMDB_HOME`; never point tests at a real store.
 - Test fixtures live in `tests/data/` and are tiny; regenerate with
   `uv run python tests/make_fixtures.py`.
+
+## Frontend
+
+React + TypeScript + Vite in `frontend/`. The production build is written to
+`src/atomdb/web/static/` and served by `atomdb serve` (not committed).
+
+```bash
+cd frontend && npm install && npm run build     # build once
+npm run dev                                      # hot reload on :5173, proxies /api to :8765
+```
