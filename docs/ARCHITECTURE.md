@@ -322,3 +322,29 @@ Data root (`$ATOMDB_HOME`, default `/work/jpeters/atomdb_store`) lives outside t
 - Try it on a real file: `/work/jpeters/Master/mptraj/nodes/Train/Apax/train_atoms.h5` (read-only import, original untouched — verify sha256 before/after).
 
 
+
+---
+
+## Implementation notes (deviations from the original plan, and why)
+
+- **Search uses a facet index instead of SQLite FTS5.** `dataset_facet` stores, per dataset,
+  facts aggregated over its upstream provenance graph and is rebuilt automatically by a
+  `before_commit` hook whenever provenance changes. This is portable to PostgreSQL and makes
+  graph-aware queries (`T:400`, `model:…`, `from:ID`) single indexed lookups. Facets stop at
+  model nodes ("one generation"); earlier generations are searchable via `lineage:`.
+- **No separate Software/Environment nodes.** Each calculation stores a
+  `software_versions` snapshot (atomdb + git commit, Python, ASE, h5py, numpy, znh5md, …) and
+  run-specific software (CP2K version/revision, `module load` lines) in `parameters`.
+- **Structures are one-frame datasets** (single code path for viewing, stats, search).
+- **Long jobs run synchronously** (stats are cached by file checksum; embeddings are
+  throwaway). The planned `task` table was not needed at current data sizes: 10k frames ×
+  96 atoms import in ~2 s, full force statistics in ~0.5 s, single frame in ~8 ms.
+- **Charts are a small dependency-free SVG/canvas layer** rather than Plotly (≈3.5 MB);
+  graph: Cytoscape + dagre; 3D: 3Dmol.js.
+- **ZnTrack/DVC is not special-cased** (user decision); znh5md H5MD files are read as-is.
+- **HPC import is local only** (user decision): run directories are copied back and parsed
+  (Slurm script + `slurm-*.out`, CP2K input/output, PLUMED). Many jobs writing one output
+  (laufband) = one calculation `ran_on` all jobs; frame↔job attribution is not invented.
+  A laufband state database is stored as-is but not interpreted.
+- **Relationship suggestions** come from structure fingerprints (coarse geometry hash,
+  robust to float32 and re-encoding; confirmed by coordinates in `whatis`).

@@ -1,35 +1,70 @@
 # atomdb
 
-Local-first database for atomistic simulation data — MD trajectories, DFT reference
-data, MLIP datasets and models — with **provenance as first-class data**.
+Local-first database for atomistic simulation data — MD trajectories, DFT reference data,
+MLIP datasets and models — with **provenance as first-class, graph-structured data**.
 
-The question atomdb is built to answer: *"Where did this file come from, how was it
-made, and what was it used for?"*
+> Find an unfamiliar H5MD file months later → `atomdb whatis file.h5` → `atomdb provenance
+> DS-… --up` shows the DFT settings, the sampling step, the MD run, the model that drove it,
+> the HPC jobs and the original files.
 
-## Status
-
-Under active development. See `docs/ARCHITECTURE.md` for the design and the phase plan.
-
-## Quick start
+## Install & start
 
 ```bash
-uv sync
-export ATOMDB_HOME=/work/jpeters/atomdb_store   # data store (outside the repo)
+uv sync                                   # + `--extra md` (DCD/XTC/TRR), `--extra descriptors` (SOAP)
+(cd frontend && npm install && npm run build)   # web UI (once)
+export ATOMDB_HOME=/work/jpeters/atomdb_store   # data store, outside the repo (default: /work/$USER/atomdb_store)
 uv run atomdb init
-uv run atomdb import trajectory.extxyz --json
-uv run atomdb ls
-uv run atomdb serve          # web UI on http://127.0.0.1:8765
+uv run atomdb serve                        # http://127.0.0.1:8765
 ```
+
+Try it on a demo store: `uv run python scripts/make_demo.py /tmp/atomdb_demo && ATOMDB_HOME=/tmp/atomdb_demo uv run atomdb serve`.
+
+## Everyday use
+
+```bash
+# existing data: scan (read-only) → review plan → import
+atomdb scan /work/jpeters/Master/mptraj --plan plan.yaml
+atomdb import-plan plan.yaml
+atomdb suggest                              # relations implied by shared structures
+
+# new data with provenance
+atomdb import run_042/output.extxyz --temperature 400 --model MACE-MH-1 --source run_042/
+atomdb import-run /work/jpeters/runs/run_042 --cluster hawk          # dry run
+atomdb import-run /work/jpeters/runs/run_042 --cluster hawk --yes    # Slurm + CP2K + PLUMED → records
+
+# questions
+atomdb whatis mystery.h5
+atomdb provenance DS-2026-000042 --up      # WHERE DID THIS COME FROM?
+atomdb provenance DS-2026-000042 --down    # WHAT WAS THIS USED FOR?
+atomdb search "r2scan+d4 el:K,Cl T:400"
+atomdb stats DS-2026-000042 ; atomdb compare TRAIN NEW ; atomdb similarity TRAIN NEW
+atomdb check --incomplete                   # what is still unknown?
+
+# use data elsewhere / safety
+atomdb link DS-2026-000042 ~/project/       # read-only symlink into the store
+atomdb validate ; atomdb backup
+```
+
+Every command takes `--json` (stable envelope, error codes) — see `docs/AI_AGENTS.md`.
+
+## Guarantees
+
+- Source files are only read; imports copy into a content-addressed, read-only store
+  (`files/sha256/ab/…`). Duplicates are detected by checksum; extra locations are recorded.
+- Non-H5MD inputs get a canonical H5MD that is verified by read-back; existing H5MD files
+  are stored unchanged. Conversions refuse to drop fields unless `--allow-loss`.
+- All state lives on disk (SQLite + store); the browser holds nothing.
+- Nothing is deleted or overwritten: restores need an empty target, validation only reports.
 
 ## Documentation
 
 | File | Content |
 |---|---|
-| `docs/ARCHITECTURE.md` | overall design, stack, phases |
+| `docs/ARCHITECTURE.md` | design, stack, phases, implementation notes |
 | `docs/DATABASE_SCHEMA.md` | tables and columns |
-| `docs/PROVENANCE.md` | provenance graph model |
-| `docs/FILE_FORMATS.md` | supported formats, metadata preservation |
-| `docs/CLI.md` | command reference |
-| `docs/API.md` | HTTP API reference |
-| `docs/DEVELOPMENT.md` | dev setup, tests, conventions |
+| `docs/PROVENANCE.md` | provenance graph model, traversal, frame lineage |
+| `docs/FILE_FORMATS.md` | formats, H5MD, metadata preservation |
+| `docs/CLI.md` | command reference incl. search language |
+| `docs/API.md` | HTTP API |
 | `docs/AI_AGENTS.md` | how AI agents should drive atomdb |
+| `docs/DEVELOPMENT.md` | dev setup, tests, conventions |
