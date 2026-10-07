@@ -139,3 +139,22 @@ def test_api_provenance_and_search(adb, data_dir):
     fr = c.get("/api/v1/frames", params=[("all", "K"), ("all", "Cl")]).json()
     assert fr["total"] == 4
     assert c.get(f"/api/v1/datasets/{ds}/completeness").json()["complete"] is False
+
+
+def test_api_frames(adb, data_dir):
+    from atomdb.services.importer import import_file
+
+    ds = import_file(adb, data_dir / "kcl_labeled.extxyz").dataset.id
+    c = TestClient(create_app(adb))
+    page = c.get(f"/api/v1/datasets/{ds}/frames").json()
+    assert page["total"] == 4 and page["items"][2]["idx"] == 2
+    f = c.get(f"/api/v1/datasets/{ds}/frames/2").json()
+    import ase.io
+
+    ref = ase.io.read(data_dir / "kcl_labeled.extxyz", 2)
+    assert f["symbols"] == ref.get_chemical_symbols()
+    assert abs(f["calc"]["forces"][0][0] - ref.calc.results["forces"][0][0]) < 1e-12
+    assert f["info"]["config_type"] == ref.info["config_type"]
+    assert c.get(f"/api/v1/datasets/{ds}/frames/99").status_code == 404
+    props = c.get(f"/api/v1/datasets/{ds}/properties").json()
+    assert any(p["name"] == "charges_custom" for p in props)

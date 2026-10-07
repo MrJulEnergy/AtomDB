@@ -13,6 +13,9 @@ codes as the CLI (see CLI.md); `not_found` → 404, `invalid_input`/`format_erro
 | GET | `/api/v1/health` | version and store location |
 | GET | `/api/v1/datasets?q=&offset=&limit=&sort=` | dataset summaries + provenance facets (`extra`); `q` = search language |
 | GET | `/api/v1/datasets/{id}` | dataset detail incl. files and origins |
+| GET | `/api/v1/datasets/{id}/frames?offset=&limit=` | frame index (energy, fmax, T, volume, ... — no coordinates) |
+| GET | `/api/v1/datasets/{id}/frames/{idx}` | one frame, lazily read from H5MD: symbols, positions, cell, pbc, calc results, info, arrays |
+| GET | `/api/v1/datasets/{id}/properties` | catalog of every stored field (origin, level, dtype, shape, unit, label calculation) |
 | GET | `/api/v1/datasets/{id}/completeness` | provenance checklist |
 | GET | `/api/v1/datasets/{id}/frames/{idx}/lineage` | frame-level lineage chain |
 | GET | `/api/v1/search?q=&element=&any=` | same as `/datasets` with element list, returns `interpreted` |
