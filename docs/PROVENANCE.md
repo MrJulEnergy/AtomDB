@@ -96,4 +96,7 @@ Existing data rarely arrives with complete provenance. atomdb supports filling i
   from a placeholder to a real node (audited).
 - Import plans (`atomdb scan --plan`) accept the same `metadata` keys and `links` per item.
 
+- `atomdb check --incomplete` lists datasets with gaps and how to fill them;
+  `atomdb suggest` proposes relations implied by shared structures.
+
 All changes are recorded in the append-only `audit_log`.

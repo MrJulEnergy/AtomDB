@@ -141,6 +141,17 @@ Add provenance later; for datasets, MD/DFT/sampling keys create structured recor
 ### `atomdb relate SRC RELATION DST [--role R]`
 Add any relation (see PROVENANCE.md).
 
+### `atomdb check [DS] [--incomplete]`
+Provenance completeness checklist per dataset: origin known? label method (DFT) known?
+functional / dispersion / basis / code version? MD temperature and driving potential?
+placeholder models? HPC job / working directory? Each missing item comes with the
+command that fills it in.
+
+### `atomdb suggest [DS]`
+Datasets whose frames all occur in another dataset but which are not connected in the
+graph → suggested `sampled_from` / `derived_from` relations with the `atomdb relate`
+command to accept them. Nothing is applied automatically.
+
 ### `atomdb merge PLACEHOLDER REAL`
 Replace a placeholder node by the real one everywhere.
 

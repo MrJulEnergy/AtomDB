@@ -667,6 +667,63 @@ def relate(
 
 @app.command()
 @handle_errors
+def suggest(
+    node_id: Annotated[str | None, typer.Argument(help="Only suggestions for this dataset.")]
+    = None,
+    json_: JsonOpt = False,
+):
+    """Suggest missing provenance relations from shared structures (never applied automatically)."""
+    from ..services.completeness import suggest_relations
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        rows = suggest_relations(s, dsvc.get_node(s, node_id).id if node_id else None)
+
+    def human(rows):
+        if not rows:
+            print("no suggestions")
+        for r in rows:
+            print(f"{r['reason']}\n    accept with: {r['command']}")
+
+    emit(rows, human)
+
+
+@app.command()
+@handle_errors
+def check(
+    node_id: Annotated[str | None, typer.Argument(help="Dataset (default: all datasets).")]
+    = None,
+    incomplete: Annotated[bool, typer.Option(help="Only list incomplete datasets.")] = False,
+    json_: JsonOpt = False,
+):
+    """Provenance completeness checklist: what is still unknown about a dataset?"""
+    from sqlalchemy import select
+
+    from ..services.completeness import completeness
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        dss = [dsvc.get_dataset(s, node_id)] if node_id else list(
+            s.execute(select(Dataset).order_by(Dataset.created_at)).scalars())
+        rows = [completeness(s, d) | {"name": d.name} for d in dss]
+    if incomplete:
+        rows = [r for r in rows if not r["complete"]]
+
+    def human(rows):
+        for r in rows:
+            mark = "complete" if r["complete"] else f"{r['score']:.0%}"
+            print(f"{r['dataset']}  {r['name']}  [{mark}]")
+            for c in r["checks"]:
+                if not c["ok"]:
+                    print(f"    missing {c['item']}: {c['hint']}")
+
+    emit(rows, human)
+
+
+@app.command()
+@handle_errors
 def merge(placeholder: str, real: str, json_: JsonOpt = False):
     """Merge a placeholder node (e.g. a model or MD run known only by name) into the real one."""
     from ..services.annotate import merge as do_merge
