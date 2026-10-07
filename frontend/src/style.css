@@ -102,3 +102,43 @@ input, select { background: var(--panel); border: 1px solid var(--line); padding
 td.name { min-width: 180px; }
 td.ids a { display: block; }
 .badge + .badge { margin-left: 4px; }
+
+/* --- data viz tokens (validated reference palette; dark steps selected, not flipped) --- */
+:root {
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #4a3aa7; --series-8: #e34948;
+  --seq-100: #cde2fb; --seq-200: #9ec5f4; --seq-300: #6da7ec; --seq-400: #3987e5; --seq-500: #256abf; --seq-600: #184f95;
+  --grid: #e6e7e8;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+    --seq-100: #104281; --seq-200: #184f95; --seq-300: #1c5cab; --seq-400: #256abf; --seq-500: #3987e5; --seq-600: #6da7ec;
+    --grid: #2a2e32;
+  }
+}
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .axis text { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.chart .axis line, .chart .axis path { stroke: var(--line); }
+.chart .gridline { stroke: var(--grid); }
+.chart .title { font-size: 12px; font-weight: 600; margin: 0 0 2px; }
+.chart .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); padding: 4px 6px; font-size: 11px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.12); z-index: 5; }
+.chart .tip i, .legend-row i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; border-radius: 2px; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; margin: 4px 0; }
+.charts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.chart-card { background: var(--panel); border: 1px solid var(--line); padding: 8px 10px; }
+.chart-card .stats-line { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* --- periodic table ------------------------------------------------------ */
+.ptable { display: grid; grid-template-columns: repeat(18, minmax(34px, 1fr)); gap: 3px; max-width: 1100px; }
+.pcell { aspect-ratio: 1 / 1; border: 1px solid var(--line); border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; cursor: pointer; user-select: none; background: var(--panel); color: var(--fg); padding: 0; }
+.pcell small { font-size: 9px; color: var(--muted); }
+.pcell.absent { color: var(--dim); border-style: dashed; cursor: default; background: transparent; }
+.pcell.absent small { color: var(--dim); }
+.pcell.sel { outline: 2px solid var(--fg); outline-offset: 1px; font-weight: 700; }
+.pcell.gap { visibility: hidden; }
+.ptable-legend { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); margin: 6px 0; }
+.ptable-legend span.sw { width: 22px; height: 12px; border: 1px solid var(--line); }
+.chart-card .hero { font-size: 22px; margin: 18px 0 8px; font-variant-numeric: tabular-nums; }

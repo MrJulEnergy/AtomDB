@@ -1,10 +1,13 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import DatasetPage from "./pages/DatasetPage";
+import ComparePage from "./pages/ComparePage";
 import DatasetsPage from "./pages/DatasetsPage";
+import ElementsPage from "./pages/ElementsPage";
 import FramePage from "./pages/FramePage";
 import GraphPage from "./pages/GraphPage";
 import NodePage from "./pages/NodePage";
 import NodesPage from "./pages/NodesPage";
+import StatsPage from "./pages/StatsPage";
 
 export default function App() {
   return (
@@ -30,6 +33,9 @@ export default function App() {
           <Route path="/nodes/:id" element={<NodePage />} />
           <Route path="/provenance/:id" element={<GraphPage />} />
           <Route path="/list/:kind" element={<NodesPage />} />
+          <Route path="/elements" element={<ElementsPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/compare" element={<ComparePage />} />
           <Route path="*" element={<p className="muted">Not available yet.</p>} />
         </Routes>
       </main>
