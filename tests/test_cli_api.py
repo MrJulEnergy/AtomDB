@@ -158,3 +158,16 @@ def test_api_frames(adb, data_dir):
     assert c.get(f"/api/v1/datasets/{ds}/frames/99").status_code == 404
     props = c.get(f"/api/v1/datasets/{ds}/properties").json()
     assert any(p["name"] == "charges_custom" for p in props)
+
+
+def test_cli_validate_backup_schema(home, data_dir, tmp_path):
+    run("init")
+    run("import", str(data_dir / "kcl_labeled.extxyz"))
+    v = json.loads(run("validate", "--json").output)
+    assert v["data"]["ok"]
+    b = json.loads(run("backup", "--json").output)["data"]
+    assert run("verify-backup", b["archive"], "--json").exit_code == 0
+    r = run("restore", b["archive"], str(tmp_path / "r"), "--json")
+    assert r.exit_code == 0, r.output
+    sc = json.loads(run("schema", "--json").output)["data"]
+    assert "sampled_from" in sc["relations"] and "provenance" in sc["cli_commands"]

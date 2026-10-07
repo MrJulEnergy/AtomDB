@@ -32,3 +32,4 @@ uv run atomdb serve          # web UI on http://127.0.0.1:8765
 | `docs/CLI.md` | command reference |
 | `docs/API.md` | HTTP API reference |
 | `docs/DEVELOPMENT.md` | dev setup, tests, conventions |
+| `docs/AI_AGENTS.md` | how AI agents should drive atomdb |

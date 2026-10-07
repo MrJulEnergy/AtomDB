@@ -877,6 +877,89 @@ def descriptors(json_: JsonOpt = False):
 
 @app.command()
 @handle_errors
+def validate(
+    node_id: Annotated[str | None, typer.Argument(help="Dataset (default: whole store).")] = None,
+    quick: Annotated[bool, typer.Option(help="Check sizes instead of full sha256.")] = False,
+    json_: JsonOpt = False,
+):
+    """Integrity check: files present, checksums, H5MD readable, frame/atom counts,
+    provenance references, SQLite integrity, orphan store files. Never modifies data."""
+    from ..services.validate import validate as do_validate
+
+    _json(json_)
+    r = do_validate(open_db(), node_id, quick=quick)
+
+    def human(r):
+        print("checked: " + ", ".join(f"{v} {k}" for k, v in r["checked"].items()))
+        for p in r["problems"]:
+            print(f"  {p['severity'].upper():8s} {p['code']:20s} {p['node'] or '':16s} {p['message']}")
+        print("OK" if r["ok"] else f"{r['errors']} error(s), {r['warnings']} warning(s)")
+
+    emit(r, human)
+    if not r["ok"]:
+        raise typer.Exit(7)
+
+
+@app.command()
+@handle_errors
+def backup(
+    out: Annotated[Path | None, typer.Option(help="Archive path (.tar.zst).")] = None,
+    json_: JsonOpt = False,
+):
+    """Backup database, all store files, config and a checksummed manifest to .tar.zst."""
+    from ..services.backup import backup as do_backup
+
+    _json(json_)
+    r = do_backup(open_db(), out)
+    emit(r, lambda r: print(f"backup written: {r['archive']} ({r['size_bytes']} B)\n"
+                            f"  sha256 {r['sha256']}\n  {r['counts']}"))
+
+
+@app.command("verify-backup")
+@handle_errors
+def verify_backup(archive: Path, json_: JsonOpt = False):
+    """Check every file in a backup archive against its manifest."""
+    from ..services.backup import verify_archive
+
+    _json(json_)
+    r = verify_archive(archive)
+    emit(r, lambda r: print("archive OK" if r["ok"] else "PROBLEMS:\n  " + "\n  ".join(r["problems"])))
+    if not r["ok"]:
+        raise typer.Exit(7)
+
+
+@app.command()
+@handle_errors
+def restore(
+    archive: Path,
+    target: Annotated[Path, typer.Argument(help="New/empty store directory.")],
+    json_: JsonOpt = False,
+):
+    """Restore a backup into a NEW store directory (verifies checksums first)."""
+    from ..services.backup import restore as do_restore
+
+    _json(json_)
+    r = do_restore(archive, target)
+    emit(r, lambda r: print(f"restored to {r['home']} — validation "
+                            f"{'OK' if r['validation']['ok'] else 'FAILED'}\n"
+                            f"  use: ATOMDB_HOME={r['home']} atomdb ls"))
+
+
+@app.command()
+@handle_errors
+def schema(json_: JsonOpt = False):
+    """Machine-readable overview for AI agents: entities, relations, IDs, search, workflows."""
+    from ..services.schema_doc import schema as do_schema
+
+    _json(json_)
+    cmds = sorted([c.name or c.callback.__name__ for c in app.registered_commands]
+                  + [f"{g.name} …" for g in app.registered_groups])
+    data = do_schema(cmds)
+    emit(data, lambda d: print(__import__("json").dumps(d, indent=2, ensure_ascii=False)))
+
+
+@app.command()
+@handle_errors
 def reindex(json_: JsonOpt = False):
     """Rebuild the search index (normally maintained automatically)."""
     from ..services.facets import rebuild_all

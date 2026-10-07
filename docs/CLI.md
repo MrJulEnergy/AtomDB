@@ -194,6 +194,32 @@ radial distribution histograms, PBC-aware) and `soap` (`uv sync --extra descript
 New descriptors subclass `atomdb.descriptors.Descriptor` and register under the
 `atomdb.descriptors` entry-point group.
 
+### `atomdb validate [DS] [--quick]`
+Read-only integrity check (exit 7 on errors): store files present, sizes, full sha256
+(skip with `--quick`), files read-only, canonical H5MD readable, frame count file ↔ dataset ↔
+frame index, atom counts of first/last frame, property catalog present, provenance edges and
+frame links pointing to existing nodes, SQLite `integrity_check` and `foreign_key_check`,
+schema at latest migration, handed-out symlinks still valid, store objects not referenced by
+the database (reported, never deleted), placeholder count.
+
+### `atomdb backup [--out FILE.tar.zst]`
+Writes `$ATOMDB_HOME/backups/atomdb-backup-YYYY-MM-DD-HHMMSS.tar.zst` (+ `.sha256` sidecar):
+a consistent SQLite snapshot (online backup API, safe while the server runs), every store
+file, `*.toml` config, and `MANIFEST.json` (creation time, instance UUID, schema revision,
+software versions, counts, sha256 of every member). Never overwrites.
+
+### `atomdb verify-backup ARCHIVE`
+Re-hashes every member against the manifest (and the sidecar checksum).
+
+### `atomdb restore ARCHIVE TARGET_DIR`
+Verifies, then restores into a new/empty directory and runs `validate` on the result.
+Existing stores are never overwritten.
+
+### `atomdb schema --json`
+Machine-readable overview for AI agents: entities, relations (with traversal direction),
+ID prefixes, search keys and examples, JSON envelope, exit codes, units, typical
+workflows, command list.
+
 ### `atomdb reindex`
 Rebuild the search index. Normally unnecessary: facets are refreshed automatically on
 every commit that changes provenance.
