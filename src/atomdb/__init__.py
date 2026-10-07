@@ -1,2 +1,3 @@
-def hello() -> str:
-    return "Hello from atomdb!"
+"""atomdb — local atomistic data & provenance database."""
+
+__version__ = "0.1.0"
