@@ -13,8 +13,10 @@ from atomdb.services.importer import import_file
 from atomdb.store.hashing import sha256_file
 
 
-def _write(p, text="hello\n"):
-    p.write_text(text)
+def _write(p, text="0"):
+    """A minimal valid one-atom xyz file whose content depends on ``text``."""
+    x = sum(map(ord, text)) * 0.01
+    p.write_text(f"1\n\nH {x} 0 0\n")
     return p
 
 
@@ -33,8 +35,8 @@ def test_init_is_idempotent(home):
 
 
 def test_ids_are_sequential_and_stable(adb, tmp_path):
-    r1 = import_file(adb, _write(tmp_path / "a.txt", "a"))
-    r2 = import_file(adb, _write(tmp_path / "b.txt", "b"))
+    r1 = import_file(adb, _write(tmp_path / "a.xyz", "a"))
+    r2 = import_file(adb, _write(tmp_path / "b.xyz", "b"))
     y = r1.dataset.created_at.year
     assert r1.dataset.id == f"DS-{y}-000001"
     assert r2.dataset.id == f"DS-{y}-000002"
@@ -42,7 +44,7 @@ def test_ids_are_sequential_and_stable(adb, tmp_path):
 
 
 def test_import_copies_and_preserves_source(adb, tmp_path):
-    src = _write(tmp_path / "traj.xyz", "1\n\nH 0 0 0\n")
+    src = _write(tmp_path / "traj.xyz")
     before = sha256_file(src)
     mtime = src.stat().st_mtime
     r = import_file(adb, src, tags=["test"])
@@ -70,7 +72,7 @@ def test_duplicate_detection(adb, tmp_path):
 
 def test_persistence_across_restart(home, tmp_path):
     a = AtomDB.init(home)
-    ids = [import_file(a, _write(tmp_path / f"f{i}.txt", str(i))).dataset.id for i in range(5)]
+    ids = [import_file(a, _write(tmp_path / f"f{i}.xyz", str(i))).dataset.id for i in range(5)]
     a.close()
     b = AtomDB.open(home)
     with b.session() as s:
@@ -89,7 +91,7 @@ def test_missing_file_and_unknown_id(adb, tmp_path):
 
 
 def test_store_files_are_not_writable_through_symlink(adb, tmp_path):
-    src = _write(tmp_path / "x.txt")
+    src = _write(tmp_path / "x.xyz")
     r = import_file(adb, src)
     stored = adb.store.path_for(r.sha256)
     with pytest.raises(PermissionError):

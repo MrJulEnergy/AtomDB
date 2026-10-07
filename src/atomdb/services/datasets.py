@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..db.models import Dataset, Node, NodeTag, Tag
+from ..db.models import Dataset, DatasetElement, Node, NodeTag, Tag
 from ..errors import NotFound
 from ..ids import normalize_id
 from ..schemas import DatasetDetail, DatasetFileOut, DatasetSummary, FileOut
@@ -27,7 +27,12 @@ def get_dataset(s: Session, ds_id: str) -> Dataset:
 
 
 def elements_of(s: Session, ds: Dataset) -> list[str]:
-    return []  # filled from the frame index once formats are parsed
+    rows = s.execute(
+        select(DatasetElement.symbol)
+        .where(DatasetElement.dataset_id == ds.id)
+        .order_by(DatasetElement.z)
+    ).scalars()
+    return list(rows)
 
 
 def file_out(adb: AtomDB, f) -> FileOut:

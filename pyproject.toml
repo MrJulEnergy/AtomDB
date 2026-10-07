@@ -35,6 +35,10 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:Setting the shape on a NumPy array:DeprecationWarning",
+    "ignore:Using `httpx` with `starlette.testclient`",
+]
 
 [tool.ruff]
 line-length = 100

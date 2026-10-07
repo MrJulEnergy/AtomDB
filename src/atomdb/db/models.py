@@ -166,6 +166,93 @@ class SymLink(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
+class Calculation(Node):
+    """An activity: MD run, DFT labeling, sampling, conversion, training, import, ..."""
+
+    __tablename__ = "calculation"
+    node_id: Mapped[str] = mapped_column(ForeignKey("node.id"), primary_key=True)
+    calc_type: Mapped[str] = mapped_column(String(32), index=True)
+    started_at: Mapped[datetime | None]
+    ended_at: Mapped[datetime | None]
+    command: Mapped[str | None] = mapped_column(Text)
+    workdir: Mapped[str | None] = mapped_column(Text)
+    exit_status: Mapped[str | None] = mapped_column(String(32))
+    parameters: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    #: reproducibility snapshot, e.g. {"python": "3.12.10", "ase": "3.29.0", "atomdb": ...}
+    software_versions: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    __mapper_args__ = {"polymorphic_identity": "calculation"}
+
+
+class Edge(Base):
+    """A provenance relation ``src --relation--> dst`` (see PROVENANCE.md)."""
+
+    __tablename__ = "edge"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    src: Mapped[str] = mapped_column(ForeignKey("node.id"), index=True)
+    dst: Mapped[str] = mapped_column(ForeignKey("node.id"), index=True)
+    relation: Mapped[str] = mapped_column(String(32), index=True)
+    role: Mapped[str] = mapped_column(String(64), default="")
+    source: Mapped[str] = mapped_column(String(16), default="auto")  # auto|parsed|user|inferred
+    attrs: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    __table_args__ = (UniqueConstraint("src", "dst", "relation", "role"),)
+
+
+# --------------------------------------------------------------------------- frame index
+
+
+class Frame(Base):
+    """One row per frame. Values are an index for search/plots; data stays in H5MD."""
+
+    __tablename__ = "frame"
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("dataset.node_id"), primary_key=True)
+    idx: Mapped[int] = mapped_column(Integer, primary_key=True)
+    n_atoms: Mapped[int] = mapped_column(Integer)
+    formula: Mapped[str] = mapped_column(String(256))
+    elem_mask_lo: Mapped[int] = mapped_column(BigInteger, default=0)
+    elem_mask_hi: Mapped[int] = mapped_column(BigInteger, default=0)
+    energy: Mapped[float | None] = mapped_column(Float)
+    energy_per_atom: Mapped[float | None] = mapped_column(Float)
+    fmax: Mapped[float | None] = mapped_column(Float)
+    temperature: Mapped[float | None] = mapped_column(Float)
+    volume: Mapped[float | None] = mapped_column(Float)
+    time: Mapped[float | None] = mapped_column(Float)
+    step: Mapped[int | None] = mapped_column(BigInteger)
+    fingerprint: Mapped[str] = mapped_column(String(20), index=True)
+
+    __table_args__ = (
+        Index("ix_frame_masks", "elem_mask_lo", "elem_mask_hi"),
+        Index("ix_frame_energy", "dataset_id", "energy_per_atom"),
+    )
+
+
+class DatasetElement(Base):
+    __tablename__ = "dataset_element"
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("dataset.node_id"), primary_key=True)
+    z: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(3), index=True)
+    n_frames: Mapped[int] = mapped_column(Integer)
+    n_atoms: Mapped[int] = mapped_column(BigInteger)
+
+
+class PropertyDef(Base):
+    """Catalog of every field found in a dataset's file (generic metadata preservation)."""
+
+    __tablename__ = "property_def"
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("dataset.node_id"), primary_key=True)
+    origin: Mapped[str] = mapped_column(String(16), primary_key=True)  # atoms|info|arrays|calc
+    name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    level: Mapped[str] = mapped_column(String(8))  # frame|atom|cell
+    dtype: Mapped[str] = mapped_column(String(32))
+    shape: Mapped[list[Any] | None] = mapped_column(JSON)
+    unit: Mapped[str | None] = mapped_column(String(32))
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    #: calculation that produced this property (e.g. DFT labels), if known
+    label_calc_id: Mapped[str | None] = mapped_column(ForeignKey("node.id"))
+
+
 # --------------------------------------------------------------------------- tags/notes
 
 

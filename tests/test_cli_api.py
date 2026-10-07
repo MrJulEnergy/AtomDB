@@ -44,7 +44,7 @@ def test_api_lists_datasets(adb, tmp_path):
     from atomdb.services.importer import import_file
 
     f = tmp_path / "a.xyz"
-    f.write_text("x")
+    f.write_text("1\n\nH 0 0 0\n")
     r = import_file(adb, f)
     client = TestClient(create_app(adb))
     page = client.get("/api/v1/datasets").json()
