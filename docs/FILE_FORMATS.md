@@ -34,6 +34,14 @@
 | `proteindatabank` | .pdb | ✓ | ✓ | structure | |
 | `gromacs` | .gro | ✓ | ✓ | structure, velocities | |
 | `traj` | .traj | ✓ | ✓ | ASE trajectory incl. calc results | |
+| `dcd` | .dcd | ✓ | | positions, cell (float32) | optional extra `md`; needs `--topology` |
+| `xtc` | .xtc | ✓ | | positions, cell (lossy, 0.001 nm) | optional extra `md`; needs `--topology` |
+| `trr` | .trr | ✓ | | positions, velocities, forces (float32) | optional extra `md`; needs `--topology`; forces kJ/(mol·Å) → eV/Å |
+| `netcdf` | .nc .ncdf | ✓ | | AMBER NetCDF | optional extra `md`; needs `--topology` |
+
+Binary MD formats (`uv sync --extra md`, via MDAnalysis) carry no element information.
+The topology file is stored alongside the dataset (role `topology`) and linked as an
+input of the import activity. Time is converted ps → fs.
 
 Formats are pluggable: implement `atomdb.formats.base.FormatAdapter` and register a
 callable returning adapters under the `atomdb.formats` entry-point group.

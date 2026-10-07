@@ -194,3 +194,21 @@ def test_fingerprint_stable_under_float32(data_dir):
     c = a.copy()
     c.positions[0] += 0.5
     assert fingerprint(a) != fingerprint(c)
+
+
+def test_binary_md_with_topology(adb, data_dir):
+    pytest.importorskip("MDAnalysis")
+    with pytest.raises(InvalidInput, match="topology"):
+        import_file(adb, data_dir / "kcl_md.dcd")
+    topo = data_dir / "kcl_md.gro"
+    # reference is the .gro (0.01 Å precision); frame 0 of the trajectories equals it
+    for ext, atol in (("dcd", 6e-3), ("xtc", 6e-3)):
+        r = import_file(adb, data_dir / f"kcl_md.{ext}", read_options={"topology": str(topo)})
+        assert r.dataset.n_frames == 3
+        assert r.dataset.elements == ["H", "O", "Cl", "K"]
+        got, _ = canonical_frames(adb, r.dataset.id)
+        ref = ase.io.read(topo)
+        np.testing.assert_allclose(got[0].positions, ref.positions, atol=atol)
+        with adb.session() as s:
+            roles = {df.role for df in dsvc.get_dataset(s, r.dataset.id).files}
+        assert "topology" in roles

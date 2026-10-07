@@ -42,6 +42,15 @@ def _json(flag: bool) -> None:
         state.json = True
 
 
+def _read_options(type_map: str | None, topology: Path | None) -> dict:
+    opts: dict = {}
+    if type_map:
+        opts["type_map"] = type_map
+    if topology:
+        opts["topology"] = str(topology.expanduser().resolve())
+    return opts
+
+
 def open_db() -> AtomDB:
     return AtomDB.open(state.home)
 
@@ -75,6 +84,9 @@ def import_(
     type_map: Annotated[
         str | None, typer.Option(help="LAMMPS type→element map, e.g. 1=K,2=Cl,3=O,4=H")
     ] = None,
+    topology: Annotated[
+        Path | None, typer.Option(help="Topology for DCD/XTC/TRR/NetCDF (stored as input).")
+    ] = None,
     raw: Annotated[
         bool, typer.Option(help="Store bytes without parsing (inputs, logs, checkpoints).")
     ] = False,
@@ -83,7 +95,7 @@ def import_(
     """Import atomistic files into the store (original kept + canonical H5MD)."""
     _json(json_)
     adb = open_db()
-    read_options = {"type_map": type_map} if type_map else {}
+    read_options = _read_options(type_map, topology)
     results = []
     for p in paths:
         if raw:
@@ -113,6 +125,7 @@ def convert(
     allow_loss: Annotated[bool, typer.Option(help="Accept dropping unrepresentable fields.")] = False,
     overwrite: bool = False,
     type_map: Annotated[str | None, typer.Option(help="LAMMPS type→element map.")] = None,
+    topology: Annotated[Path | None, typer.Option(help="Topology for binary MD formats.")] = None,
     no_record: Annotated[bool, typer.Option(help="Do not record in the database.")] = False,
     json_: JsonOpt = False,
 ):
@@ -124,7 +137,7 @@ def convert(
     adb = None if no_record or not get_paths(state.home).initialized else open_db()
     r = do_convert(
         adb, src, out, to=to, frm=fmt, allow_loss=allow_loss, overwrite=overwrite,
-        read_options={"type_map": type_map} if type_map else None,
+        read_options=_read_options(type_map, topology),
     )
 
     def human(r):

@@ -35,6 +35,8 @@ from .files import store_file
 from .provenance import add_edge
 
 CHUNK = 256
+#: read options that name auxiliary input files; they are stored and linked as inputs
+FILE_OPTIONS = ("topology",)
 
 
 class _Indexer:
@@ -291,6 +293,12 @@ def _import(
     s.add(imp)
     s.flush()
     add_edge(s, imp.id, f_orig.id, "used")
+    for key in FILE_OPTIONS:
+        if read_options.get(key) and Path(read_options[key]).is_file():
+            f_aux, _ = store_file(adb, s, read_options[key], import_id=imp.id)
+            add_edge(s, imp.id, f_aux.id, "used", role=key)
+            ds.files.append(DatasetFile(file_id=f_aux.id, role=key))
+            imp.parameters = {**imp.parameters, f"{key}_sha256": f_aux.sha256}
     add_edge(s, imp.id, ds.id, "generated")
     adb.audit(s, "dataset.import", ds.id, file_id=f_orig.id, path=str(p.resolve()))
     return ImportResult(

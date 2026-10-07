@@ -88,6 +88,22 @@ def main() -> None:
         "1 1 0.1 0.0 0.0 0.2 0.0 0.0\n2 2 1.5 1.6 1.6 -0.2 0.0 0.0\n"
     )
 
+    # binary MD trajectories (needs MDAnalysis)
+    try:
+        import MDAnalysis as mda
+
+        traj = [kcl_water(2) for _ in range(3)]
+        ase.io.write(OUT / "kcl_md.gro", traj[0], format="gromacs")
+        u = mda.Universe(str(OUT / "kcl_md.gro"))
+        for ext in ("dcd", "xtc"):
+            with mda.Writer(str(OUT / f"kcl_md.{ext}"), n_atoms=len(traj[0])) as w:
+                for a in traj:
+                    u.atoms.positions = a.positions
+                    u.dimensions = [8.0, 8.0, 8.0, 90, 90, 90]
+                    w.write(u.atoms)
+    except ImportError:
+        print("MDAnalysis not installed: skipping DCD/XTC fixtures")
+
     # corrupted inputs
     text = (OUT / "kcl_labeled.extxyz").read_text().splitlines()
     (OUT / "corrupt_truncated.extxyz").write_text("\n".join(text[: len(text) // 2 - 3]) + "\n")
