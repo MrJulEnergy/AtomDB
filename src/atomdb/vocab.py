@@ -9,9 +9,10 @@ from __future__ import annotations
 import re
 
 FUNCTIONALS = {
-    "r2scan": "r2SCAN", "r²scan": "r2SCAN", "mggaxr2scan+mggacr2scan": "r2SCAN",
-    "mggaxr2scan": "r2SCAN", "rscan": "rSCAN", "scan": "SCAN",
-    "mggaxscan+mggacscan": "SCAN", "pbe": "PBE", "ggaxpbe+ggacpbe": "PBE", "pbesol": "PBEsol",
+    # combinations (CP2K/libxc exchange + correlation) are keyed in sorted order
+    "r2scan": "r2SCAN", "r²scan": "r2SCAN", "mggacr2scan+mggaxr2scan": "r2SCAN",
+    "mggaxr2scan": "r2SCAN", "rscan": "rSCAN", "scan": "SCAN", "mggacrscan+mggaxrscan": "rSCAN",
+    "mggacscan+mggaxscan": "SCAN", "pbe": "PBE", "ggacpbe+ggaxpbe": "PBE", "pbesol": "PBEsol",
     "revpbe": "revPBE", "rpbe": "RPBE", "blyp": "BLYP", "b3lyp": "B3LYP", "pbe0": "PBE0",
     "hse06": "HSE06", "b97mv": "B97M-V", "wb97xd": "ωB97X-D", "wb97mv": "ωB97M-V",
     "ωb97xd": "ωB97X-D", "ωb97mv": "ωB97M-V", "tpss": "TPSS", "optb88vdw": "optB88-vdW",
@@ -43,7 +44,8 @@ def _key(value: str) -> str:
 def functional(value: str | None) -> str | None:
     if value is None:
         return None
-    return FUNCTIONALS.get(_key(value), value.strip())
+    key = "+".join(sorted(_key(p) for p in value.split("+"))) if "+" in value else _key(value)
+    return FUNCTIONALS.get(key, value.strip())
 
 
 def dispersion(value: str | None) -> str | None:

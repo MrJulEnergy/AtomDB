@@ -37,7 +37,11 @@ def subtitle(s: Session, node: Node) -> str:
             d = node.dft
             fd = "/".join(x for x in (d.functional, d.dispersion if d.dispersion != "none" else None)
                           if x)
-            return " · ".join(x for x in (d.code, fd, d.basis) if x)
+            basis = d.basis
+            if basis and ", " in basis:
+                parts = basis.split(", ")
+                basis = f"{parts[0]} (+{len(parts) - 1})"
+            return " · ".join(x for x in (d.code, fd, basis) if x)
         if node.sampling is not None:
             return f"{node.sampling.method} · {node.sampling.n_selected or '?'} selected"
         if node.calc_type == "conversion" and node.parameters:

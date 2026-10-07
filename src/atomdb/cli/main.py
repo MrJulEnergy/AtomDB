@@ -215,6 +215,77 @@ def convert(
     emit(r, human)
 
 
+@app.command("import-run")
+@handle_errors
+def import_run(
+    run_dirs: Annotated[list[Path], typer.Argument(help="Calculation directories.")],
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Create the records.")] = False,
+    cluster: Annotated[str | None, typer.Option(help="HPC system name.")] = None,
+    calc_type: Annotated[str | None, typer.Option("--type", help="dft | md | other")] = None,
+    input: Annotated[list[str], typer.Option(help="Existing dataset used as input.")] = [],
+    sampled_from: Annotated[str | None, typer.Option(
+        help="Dataset the input structures were selected from.")] = None,
+    model: Annotated[str | None, typer.Option(help="Model that drove an MD run.")] = None,
+    name: str | None = None,
+    exclude: Annotated[list[str], typer.Option(help="Extra glob patterns to skip.")] = [],
+    json_: JsonOpt = False,
+):
+    """Import HPC calculation directories (Slurm, CP2K, PLUMED) with full provenance.
+
+    Without --yes only the proposed records are shown (nothing is written).
+    """
+    from ..services.runimport import DEFAULT_EXCLUDE, execute_run, plan_run
+
+    _json(json_)
+    adb = open_db() if yes else None
+    out = []
+    for d in run_dirs:
+        plan = plan_run(d, exclude=DEFAULT_EXCLUDE + tuple(exclude), cluster=cluster)
+        entry: dict = {"plan": plan}
+        if yes:
+            entry["result"] = execute_run(adb, plan, input_datasets=input,
+                                          sampled_from=sampled_from, model=model, name=name,
+                                          calc_type=calc_type)
+        out.append(entry)
+
+    def human(entries):
+        for e in entries:
+            p = e["plan"]
+            c = p["calc"]
+            print(f"run {p['run_dir']}")
+            print(f"  calculation: {calc_type or c['type']}  {c.get('name') or ''}")
+            for block in ("dft", "md"):
+                if c.get(block):
+                    print(f"    {block}: " + ", ".join(f"{k}={v}" for k, v in c[block].items()))
+            if c.get("enhanced_sampling"):
+                print(f"    enhanced sampling: {c['enhanced_sampling']['method']}")
+            if c.get("qc"):
+                q = c["qc"]
+                print(f"    QC: {q['n_force_evals']} force evaluations, "
+                      f"{q['scf_not_converged']} SCF not converged, hosts {', '.join(q['hosts'])}")
+            sc = p["submit_script"]
+            if sc:
+                print(f"  slurm: partition={sc['partition']} cpus={sc['n_cpus']} "
+                      f"gpus={sc['n_gpus']} time={sc['time_limit']} modules={sc['modules']}")
+            print(f"  jobs: {', '.join(j['job_id'] + (f' ({j["state"]})' if j['state'] else '') for j in p['jobs']) or '-'}")
+            for item in p["inputs"]:
+                print(f"  input  [{item['role']}] {item['path']}")
+            for item in p["outputs"]:
+                print(f"  output [dataset] {item['path']}")
+            print(f"  logs: {len(p['logs'])}, other files: {len(p['aux'])}, "
+                  f"excluded: {len(p['excluded'])}")
+            for w in p["warnings"]:
+                print(f"  WARNING: {w}")
+            if "result" in e:
+                r = e["result"]
+                print(f"  → recorded {r['calculation']}; jobs {', '.join(r['jobs'])}; "
+                      f"datasets in {r['datasets']['inputs']} out {r['datasets']['outputs']}")
+            else:
+                print("  (dry run — re-run with --yes to record)")
+
+    emit(out, human)
+
+
 @app.command()
 @handle_errors
 def whatis(

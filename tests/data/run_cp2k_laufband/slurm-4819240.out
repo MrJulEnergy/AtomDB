@@ -1,0 +1,2 @@
+worker started
+slurmstepd: error: *** JOB 4819240 ON node0433 CANCELLED AT 2026-08-18T09:12:01 DUE TO TIME LIMIT ***

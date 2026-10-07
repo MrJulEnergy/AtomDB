@@ -79,6 +79,29 @@ atomdb import /work/jpeters/project/run_042/output.extxyz \
     --temperature 400 --model mace-mh-1 --source /work/jpeters/project/run_042/
 ```
 
+### `atomdb import-run DIR... [--yes] [--cluster NAME] [--type dft|md|other] [--input DS] [--sampled-from DS] [--model M] [--exclude GLOB]`
+Import calculation directories copied back from an HPC system. Without `--yes` it only
+shows what would be recorded. Recognises:
+
+- **Slurm**: `#SBATCH` options of the submit script (partition, nodes, tasks, CPUs, GPUs,
+  memory, time limit, account, `module load` lines) and one `JOB` per `slurm-<id>[_<task>].out`
+  with failure state from the log (TIMEOUT, CANCELLED, OUT_OF_MEMORY, FAILED).
+- **CP2K**: input (`@SET`/`@INCLUDE` aware; functional incl. libxc combinations such as
+  r2SCAN, dispersion D3/D3BJ/D4, basis and pseudopotential per kind, cutoffs, EPS_SCF,
+  smearing, charge, multiplicity, k-points, run type, MD settings for AIMD) — the full input
+  tree is stored as `calc_param`s; output (version, git revision, hosts, start/end, number
+  of force evaluations, unconverged SCF runs → warning).
+- **PLUMED** input → enhanced-sampling record.
+- **Structures**: unlabeled files are inputs, labeled files (or MD trajectories) outputs;
+  both imported as datasets. CP2K `*-frc-*`/`*-vel-*` files are stored raw (they are not
+  structures).
+- **laufband / many jobs, one output**: one calculation linked to all jobs; frame↔job
+  attribution is not invented.
+- Every other file is stored (`part_of` the calculation). `*.wfn`, `*.bak-*`, core dumps are
+  skipped by default.
+
+Re-importing the same directory is detected.
+
 ### `atomdb info ID`
 Everything known about any node (dataset, calculation, model, job, file).
 

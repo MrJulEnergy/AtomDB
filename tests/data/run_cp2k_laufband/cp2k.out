@@ -1,0 +1,16 @@
+ **** **** ******  **  PROGRAM STARTED AT               2026-08-17 09:12:01.123
+ ***** ** ***  *** **   PROGRAM STARTED ON                          node0421
+ **    ****   ******    PROGRAM STARTED BY                           jpeters
+ ***** **    ** ** **   PROGRAM PROCESS ID                            123456
+  **** **  *******  **  PROGRAM STARTED IN /scratch/jpeters/kcl/run_042
+
+ CP2K| version string:                                      CP2K version 2025.1
+ CP2K| source code revision number:                                  git:abc1234
+ GLOBAL| Run type                                                  ENERGY_FORCE
+  *** SCF run converged in    14 steps ***
+ ENERGY| Total FORCE_EVAL ( QS ) energy [hartree]              -540.123456789012
+  *** SCF run converged in    13 steps ***
+ ENERGY| Total FORCE_EVAL ( QS ) energy [hartree]              -540.223456789012
+  *** SCF run NOT converged ***
+ ENERGY| Total FORCE_EVAL ( QS ) energy [hartree]              -540.023456789012
+ **** **** ******  **  PROGRAM ENDED AT                 2026-08-17 15:40:12.001

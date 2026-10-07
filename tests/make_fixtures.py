@@ -44,6 +44,131 @@ def labeled(atoms: ase.Atoms, i: int) -> ase.Atoms:
     return atoms
 
 
+CP2K_INP = """\
+@SET CUTOFF 1000
+&GLOBAL
+  PROJECT kcl_r2scan
+  RUN_TYPE ENERGY_FORCE
+  PRINT_LEVEL LOW
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  STRESS_TENSOR ANALYTICAL
+  &DFT
+    BASIS_SET_FILE_NAME BASIS_MOLOPT_UZH
+    POTENTIAL_FILE_NAME POTENTIAL_UZH
+    CHARGE 0
+    &MGRID
+      CUTOFF ${CUTOFF}
+      REL_CUTOFF 60
+    &END MGRID
+    &SCF
+      EPS_SCF 1.0E-6
+      MAX_SCF 50
+      &OT
+        MINIMIZER DIIS
+      &END OT
+    &END SCF
+    &XC
+      &XC_FUNCTIONAL
+        &MGGA_X_R2SCAN
+        &END MGGA_X_R2SCAN
+        &MGGA_C_R2SCAN
+        &END MGGA_C_R2SCAN
+      &END XC_FUNCTIONAL
+      &VDW_POTENTIAL
+        POTENTIAL_TYPE PAIR_POTENTIAL
+        &PAIR_POTENTIAL
+          TYPE DFTD4
+          REFERENCE_FUNCTIONAL r2SCAN
+        &END PAIR_POTENTIAL
+      &END VDW_POTENTIAL
+    &END XC
+  &END DFT
+  &SUBSYS
+    &KIND K
+      BASIS_SET TZV2P-MOLOPT-SCAN-GTH-q9
+      POTENTIAL GTH-SCAN-q9
+    &END KIND
+    &KIND Cl
+      BASIS_SET TZV2P-MOLOPT-SCAN-GTH-q7
+      POTENTIAL GTH-SCAN-q7
+    &END KIND
+    &KIND O
+      BASIS_SET TZV2P-MOLOPT-SCAN-GTH-q6
+      POTENTIAL GTH-SCAN-q6
+    &END KIND
+    &KIND H
+      BASIS_SET TZV2P-MOLOPT-SCAN-GTH-q1
+      POTENTIAL GTH-SCAN-q1
+    &END KIND
+  &END SUBSYS
+&END FORCE_EVAL
+"""
+
+SUBMIT = """\
+#!/bin/bash
+#SBATCH --job-name=kcl_r2scan_label
+#SBATCH --partition=cpu
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=64
+#SBATCH --cpus-per-task=1
+#SBATCH --time=24:00:00
+#SBATCH --mem=200G
+#SBATCH -A icp_kcl
+module load cp2k/2025.1
+export OMP_NUM_THREADS=1
+# many jobs of this script run concurrently; laufband hands out frames
+srun python label.py --input structures.extxyz --output labeled.h5
+"""
+
+CP2K_OUT = """\
+ **** **** ******  **  PROGRAM STARTED AT               2026-08-17 09:12:01.123
+ ***** ** ***  *** **   PROGRAM STARTED ON                          node0421
+ **    ****   ******    PROGRAM STARTED BY                           jpeters
+ ***** **    ** ** **   PROGRAM PROCESS ID                            123456
+  **** **  *******  **  PROGRAM STARTED IN /scratch/jpeters/kcl/run_042
+
+ CP2K| version string:                                      CP2K version 2025.1
+ CP2K| source code revision number:                                  git:abc1234
+ GLOBAL| Run type                                                  ENERGY_FORCE
+  *** SCF run converged in    14 steps ***
+ ENERGY| Total FORCE_EVAL ( QS ) energy [hartree]              -540.123456789012
+  *** SCF run converged in    13 steps ***
+ ENERGY| Total FORCE_EVAL ( QS ) energy [hartree]              -540.223456789012
+  *** SCF run NOT converged ***
+ ENERGY| Total FORCE_EVAL ( QS ) energy [hartree]              -540.023456789012
+ **** **** ******  **  PROGRAM ENDED AT                 2026-08-17 15:40:12.001
+"""
+
+
+def make_run_dir(d: Path) -> None:
+    d.mkdir(exist_ok=True)
+    (d / "cp2k.inp").write_text(CP2K_INP)
+    (d / "submit.sh").write_text(SUBMIT)
+    (d / "label.py").write_text("# driver: laufband loop, ASE CP2K calculator\n")
+    (d / "cp2k.out").write_text(CP2K_OUT)
+    (d / "slurm-4819231.out").write_text("worker started\nlabeled 2 frames\n")
+    (d / "slurm-4819232.out").write_text("worker started\nlabeled 1 frame\n")
+    (d / "slurm-4819240.out").write_text(
+        "worker started\nslurmstepd: error: *** JOB 4819240 ON node0433 CANCELLED AT "
+        "2026-08-18T09:12:01 DUE TO TIME LIMIT ***\n")
+    (d / "laufband.sqlite").write_bytes(b"SQLite format 3\x00" + bytes(64))
+    unlabeled = [kcl_water(2, 0.3) for _ in range(3)]
+    ase.io.write(d / "structures.extxyz", unlabeled)
+    out = d / "labeled.h5"
+    if out.exists():
+        out.unlink()
+    labeled = []
+    for i, a in enumerate(unlabeled):
+        b = a.copy()
+        b.calc = SinglePointCalculator(b, energy=-540.1 * 27.211 - i,
+                                       forces=rng.normal(scale=0.3, size=(len(b), 3)),
+                                       stress=rng.normal(scale=0.01, size=6))
+        labeled.append(b)
+    znh5md.IO(str(out)).extend(labeled)
+
+
 def main() -> None:
     OUT.mkdir(exist_ok=True)
     # plain xyz: 3 frames, positions only
@@ -103,6 +228,8 @@ def main() -> None:
                     w.write(u.atoms)
     except ImportError:
         print("MDAnalysis not installed: skipping DCD/XTC fixtures")
+
+    make_run_dir(OUT / "run_cp2k_laufband")
 
     # corrupted inputs
     text = (OUT / "kcl_labeled.extxyz").read_text().splitlines()
