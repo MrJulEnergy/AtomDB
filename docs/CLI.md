@@ -52,6 +52,18 @@ Symlink a dataset's canonical H5MD (or original file with `--original`) from the
 to `DEST` (directory or file path). Store files are read-only. Existing paths are never
 replaced. Links are recorded so `validate` can find dangling ones.
 
+### `atomdb scan ROOT [--plan plan.yaml] [--exclude DIR]... [--no-models] [--max-depth N]`
+Find existing data under ROOT, strictly read-only. Skips `.venv`, `node_modules`, `.git`
+and similar. Every candidate is hashed and classified:
+`new`, `in_db` (identical bytes already stored), or `possible_duplicate` (first frame
+matches an indexed frame). Also lists directories that look like calculation runs or
+model checkpoints. `--plan` writes an editable YAML import plan.
+
+### `atomdb import-plan PLAN [--dry-run]`
+Import everything in a reviewed plan (names, descriptions, tags, formats and read options
+per item). `in_db` items and items with `import: false` are skipped. Errors are reported
+per item; other items still import.
+
 ### `atomdb formats`
 Supported formats and their capabilities.
 

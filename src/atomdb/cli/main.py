@@ -211,6 +211,68 @@ def link(
 
 @app.command()
 @handle_errors
+def scan(
+    root: Path,
+    plan: Annotated[Path | None, typer.Option(help="Write an editable YAML import plan.")] = None,
+    exclude: Annotated[list[str], typer.Option(help="Directory names to skip (repeatable).")] = [],
+    no_models: Annotated[bool, typer.Option(help="Ignore model checkpoints.")] = False,
+    max_depth: int | None = None,
+    json_: JsonOpt = False,
+):
+    """Find existing atomistic data under ROOT (read-only) and report what is new."""
+    from ..services.scan import DEFAULT_EXCLUDE, write_plan
+    from ..services.scan import scan as do_scan
+
+    _json(json_)
+    r = do_scan(open_db(), root, exclude=DEFAULT_EXCLUDE + tuple(exclude),
+                include_models=not no_models, max_depth=max_depth)
+    if plan:
+        r["plan_file"] = str(write_plan(r, plan).resolve())
+
+    def human(r):
+        table(["STATUS", "KIND", "FORMAT", "SIZE", "PATH", "KNOWN AS"],
+              [[i["status"], i["kind"], i["format"] or "", i["size_bytes"],
+                i["path"], " ".join(i["known_as"])] for i in r["items"]])
+        sm = r["summary"]
+        print(f"{sm['new']} new, {sm['in_db']} already stored, "
+              f"{sm['possible_duplicate']} possible duplicates")
+        if r["run_dirs"]:
+            print("directories that look like calculation runs (use import-run):")
+            for d in r["run_dirs"]:
+                print(f"  {d}")
+        if r["model_dirs"]:
+            print("directories that look like model checkpoints (use model add):")
+            for d in r["model_dirs"]:
+                print(f"  {d}")
+        if r.get("plan_file"):
+            print(f"plan written to {r['plan_file']} — edit, then: atomdb import-plan {r['plan_file']}")
+
+    emit(r, human)
+
+
+@app.command("import-plan")
+@handle_errors
+def import_plan(
+    plan: Path,
+    dry_run: bool = False,
+    json_: JsonOpt = False,
+):
+    """Import everything listed in a (reviewed) plan written by `atomdb scan --plan`."""
+    from ..services.scan import execute_plan, load_plan
+
+    _json(json_)
+    results = execute_plan(open_db(), load_plan(plan), dry_run=dry_run)
+
+    def human(rs):
+        for r in rs:
+            extra = r.get("id") or (r.get("error") or {}).get("message", "")
+            print(f"{r['action']:<10} {r['path']}  {extra}")
+
+    emit(results, human)
+
+
+@app.command()
+@handle_errors
 def formats(json_: JsonOpt = False):
     """List supported file formats and what they can represent."""
     from ..formats.registry import adapters
