@@ -46,50 +46,21 @@ def compute_facets(s: Session, ds: Dataset) -> list[dict]:
         v = a.value
         add(f"attr:{a.key}", v, float(v) if isinstance(v, (int, float)) and not isinstance(
             v, bool) else None)
-    g = traverse(s, ds.id, "up", 50)
-    for nid in g["levels"]:
+    full = traverse(s, ds.id, "up", 50)["levels"]
+    own = traverse(s, ds.id, "up", 50, stop_at_models=True)["levels"]
+    for nid in full:
         if nid == ds.id:
             continue
         add("ancestor", nid)
         node = s.get(Node, nid)
         if node is None:
             continue
-        if isinstance(node, Calculation):
-            add("calc_type", node.calc_type)
-            if node.dft is not None:
-                d = node.dft
-                add("functional", d.functional)
-                add("functional_key", vocab.match_key(d.functional) if d.functional else None)
-                add("dispersion", d.dispersion)
-                add("code", d.code)
-                add("code_version", d.code_version)
-                add("basis", d.basis)
-                add("pseudopotential", d.pseudopotential)
-                if d.cutoff_ry is not None:
-                    add("cutoff", d.cutoff_ry, d.cutoff_ry)
-            if node.md is not None:
-                m = node.md
-                if m.temperature_k is not None:
-                    add("temperature", f"{m.temperature_k:g}", m.temperature_k)
-                if m.pressure_bar is not None:
-                    add("pressure", f"{m.pressure_bar:g}", m.pressure_bar)
-                add("ensemble", m.ensemble)
-                add("md_engine", m.engine)
-                add("thermostat", m.thermostat)
-            for es in node.enhanced_sampling:
-                add("enhanced_sampling", es.method)
-            if node.sampling is not None:
-                add("sampling_method", node.sampling.method)
-        elif isinstance(node, Model):
-            add("model", node.name)
-            add("model_key", vocab.match_key(node.name))
-            add("model_family", node.family)
-        elif isinstance(node, HPCJob):
-            add("cluster", node.cluster)
-            add("partition", node.partition)
-            add("job_id", node.job_id)
-        elif isinstance(node, Dataset):
-            add("source_dataset", node.id)
+        # plain keys: facts of this dataset's own generation (not walking past a model);
+        # "lineage:<key>": facts anywhere upstream, incl. the model's training data
+        for key, value, num in _node_facts(node):
+            add("lineage:" + key, value, num)
+            if nid in own:
+                add(key, value, num)
     seen = set()
     out = []
     for k, v, n in rows:
@@ -97,6 +68,52 @@ def compute_facets(s: Session, ds: Dataset) -> list[dict]:
             continue
         seen.add((k, v))
         out.append({"dataset_id": ds.id, "key": k, "value": v, "num": n})
+    return out
+
+
+def _node_facts(node: Node) -> list[tuple[str, object, float | None]]:
+    out: list[tuple[str, object, float | None]] = []
+
+    def add(key: str, value, num: float | None = None) -> None:
+        if value is not None and value != "":
+            out.append((key, value, num))
+
+    if isinstance(node, Calculation):
+        add("calc_type", node.calc_type)
+        if node.dft is not None:
+            d = node.dft
+            add("functional", d.functional)
+            add("functional_key", vocab.match_key(d.functional) if d.functional else None)
+            add("dispersion", d.dispersion)
+            add("code", d.code)
+            add("code_version", d.code_version)
+            add("basis", d.basis)
+            add("pseudopotential", d.pseudopotential)
+            if d.cutoff_ry is not None:
+                add("cutoff", d.cutoff_ry, d.cutoff_ry)
+        if node.md is not None:
+            m = node.md
+            if m.temperature_k is not None:
+                add("temperature", f"{m.temperature_k:g}", m.temperature_k)
+            if m.pressure_bar is not None:
+                add("pressure", f"{m.pressure_bar:g}", m.pressure_bar)
+            add("ensemble", m.ensemble)
+            add("md_engine", m.engine)
+            add("thermostat", m.thermostat)
+        for es in node.enhanced_sampling:
+            add("enhanced_sampling", es.method)
+        if node.sampling is not None:
+            add("sampling_method", node.sampling.method)
+    elif isinstance(node, Model):
+        add("model", node.name)
+        add("model_key", vocab.match_key(node.name))
+        add("model_family", node.family)
+    elif isinstance(node, HPCJob):
+        add("cluster", node.cluster)
+        add("partition", node.partition)
+        add("job_id", node.job_id)
+    elif isinstance(node, Dataset):
+        add("source_dataset", node.id)
     return out
 
 

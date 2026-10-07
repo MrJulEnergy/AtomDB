@@ -113,3 +113,25 @@ def test_frame_search(db):
         assert set(r["per_dataset"]) == {ids["traj"], ids["sel"], ids["lab"], ids["pbe"]}
         r = search_frames(s, any_elements=["Na"])
         assert r["total"] == 1 and r["items"][0]["dataset"] == ids["nacl"]
+
+
+def test_generations_do_not_leak(adb, data_dir, tmp_path):
+    """A trajectory from a model trained on r2SCAN data is not itself 'r2SCAN' or '400 K'."""
+    from atomdb.services.records import ModelSpec, add_model, record_training
+
+    lab = import_file(adb, data_dir / "kcl_labeled.extxyz").dataset.id
+    traj = import_file(adb, data_dir / "kcl_plain.xyz").dataset.id
+    new = import_file(adb, data_dir / "kcl_variable.extxyz").dataset.id
+    with adb.session() as s:
+        record_md(s, [lab], model="MACE-MH-1", md={"temperature_k": 400})
+        record_dft(s, [lab], dft={"functional": "r2SCAN", "dispersion": "D4"})
+        m = add_model(adb, s, ModelSpec(name="own-model"))
+        record_training(s, m.id, [lab])
+        record_md(s, [new], model=m.id, md={"temperature_k": 330})
+    assert q(adb, "T:400") == {lab}
+    assert q(adb, "r2scan") == {lab}
+    assert q(adb, "model:MACE-MH-1") == {lab}
+    assert q(adb, "model:own-model") == {new}
+    assert q(adb, "lineage:r2scan") == {lab, new}
+    assert q(adb, f"from:{lab}") == {new}
+    assert traj not in q(adb, "lineage:r2scan")

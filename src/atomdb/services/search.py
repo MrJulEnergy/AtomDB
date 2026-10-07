@@ -8,6 +8,12 @@
     el:K,Cl   (contains all)   el:K|Na  (contains any)   only:K,Cl,O,H  (exactly these)
     es:any  es:metadynamics       enhanced sampling
     from:MD-2026-000017           anything derived from a node (any depth)
+    lineage:r2scan                anywhere upstream, including earlier generations (e.g. the
+                                  training data of the model that generated a trajectory)
+
+Keyed terms and free text refer to a dataset's own generation: an MD trajectory generated
+by a model trained on r2SCAN data does not match ``functional:r2scan`` (it matches
+``lineage:r2scan``).
     frames>100  atoms<500  has:forces  has:stress  tag:production  name:kcl
     cluster:hawk  ensemble:NVT  sampling:uncertainty  status:placeholder
     <anything>:<value>            dataset metadata set with --set / annotate
@@ -46,7 +52,7 @@ ALIASES = {
     "element": "elements", "elements": "elements", "contains": "elements", "only": "only",
     "frames": "frames", "atoms": "atoms", "has": "has", "name": "name", "id": "id",
     "status": "status", "engine": "md_engine", "thermostat": "thermostat",
-    "cutoff": "cutoff", "calc": "calc_type", "version": "code_version",
+    "cutoff": "cutoff", "calc": "calc_type", "version": "code_version", "lineage": "lineage",
 }
 NUMERIC_FACETS = {"temperature", "pressure", "cutoff"}
 CONTAINS_FACETS = {"basis", "pseudopotential", "code_version"}
@@ -198,6 +204,14 @@ def _term_condition(key: str, op: str, val: str):
         return Dataset.id.in_(select(NodeTag.node_id).join(Tag).where(Tag.name == val))
     if key == "ancestor":
         return _facet("ancestor", DatasetFacet.value == normalize_id(val))
+    if key == "lineage":
+        like = val.lower()
+        sub = select(DatasetFacet.dataset_id).where(
+            DatasetFacet.key.startswith("lineage:"),
+            or_(func.lower(DatasetFacet.value).contains(like),
+                and_(DatasetFacet.key == "lineage:functional_key",
+                     DatasetFacet.value == vocab.match_key(vocab.functional(val)))))
+        return Dataset.id.in_(sub)
     if key == "functional":
         target = vocab.match_key(vocab.functional(val))
         cond = _facet("functional_key", DatasetFacet.value == target)
@@ -238,6 +252,7 @@ def build(query: Query) -> Select:
             func.lower(Dataset.name).contains(like),
             func.lower(func.coalesce(Dataset.description, "")).contains(like),
             Dataset.id.in_(select(DatasetFacet.dataset_id).where(
+                ~DatasetFacet.key.startswith("lineage:"), DatasetFacet.key != "ancestor",
                 func.lower(DatasetFacet.value).contains(like))),
             Dataset.id == normalize_id(t),
         ))

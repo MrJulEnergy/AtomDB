@@ -86,8 +86,13 @@ def _neighbors(s: Session, ids: set[str], direction: str) -> list[Edge]:
     return out
 
 
-def traverse(s: Session, root: str, direction: str = "up", depth: int = 50) -> dict:
-    """Breadth-first walk of the provenance graph. Returns nodes, edges and levels."""
+def traverse(s: Session, root: str, direction: str = "up", depth: int = 50,
+             stop_at_models: bool = False) -> dict:
+    """Breadth-first walk of the provenance graph. Returns nodes, edges and levels.
+
+    ``stop_at_models`` includes model nodes but does not walk past them, i.e. it stays
+    within one "generation" (the model's own training data belongs to the previous one).
+    """
     if direction not in ("up", "down", "both"):
         raise ValueError("direction must be up, down or both")
     if direction == "both":
@@ -117,7 +122,8 @@ def traverse(s: Session, root: str, direction: str = "up", depth: int = 50) -> d
             edges[e.id] = e
             if other not in levels:
                 levels[other] = level
-                nxt.add(other)
+                if not (stop_at_models and other.startswith("MDL-")):
+                    nxt.add(other)
         if not nxt:
             break
         frontier = nxt

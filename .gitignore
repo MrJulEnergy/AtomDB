@@ -17,4 +17,3 @@ atomdb_store/
 
 # built frontend (run: cd frontend && npm install && npm run build)
 src/atomdb/web/static/*
-!src/atomdb/web/static/.gitkeep
