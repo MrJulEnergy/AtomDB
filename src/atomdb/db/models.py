@@ -410,6 +410,24 @@ class DatasetElement(Base):
     n_atoms: Mapped[int] = mapped_column(BigInteger)
 
 
+class DatasetFacet(Base):
+    """Search index: facts about a dataset aggregated from its whole upstream graph
+    (functional, dispersion, model, temperature, ancestors, ...). Derived data —
+    rebuilt automatically when provenance changes (see services/facets.py)."""
+
+    __tablename__ = "dataset_facet"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("dataset.node_id"), index=True)
+    key: Mapped[str] = mapped_column(String(64))
+    value: Mapped[str] = mapped_column(String(512))
+    num: Mapped[float | None] = mapped_column(Float)
+
+    __table_args__ = (
+        Index("ix_facet_key_value", "key", "value"),
+        Index("ix_facet_key_num", "key", "num"),
+    )
+
+
 class PropertyDef(Base):
     """Catalog of every field found in a dataset's file (generic metadata preservation)."""
 

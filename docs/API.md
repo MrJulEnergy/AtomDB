@@ -11,5 +11,15 @@ codes as the CLI (see CLI.md); `not_found` → 404, `invalid_input`/`format_erro
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/v1/health` | version and store location |
-| GET | `/api/v1/datasets?offset=&limit=&tag=` | paginated dataset summaries (`{total, offset, limit, items}`) |
+| GET | `/api/v1/datasets?q=&offset=&limit=&sort=` | dataset summaries + provenance facets (`extra`); `q` = search language |
 | GET | `/api/v1/datasets/{id}` | dataset detail incl. files and origins |
+| GET | `/api/v1/datasets/{id}/completeness` | provenance checklist |
+| GET | `/api/v1/datasets/{id}/frames/{idx}/lineage` | frame-level lineage chain |
+| GET | `/api/v1/search?q=&element=&any=` | same as `/datasets` with element list, returns `interpreted` |
+| GET | `/api/v1/frames?all=K&all=Cl&any=&dataset=` | frames by element combination |
+| GET | `/api/v1/elements` | elements present (datasets / frames / atoms per element) |
+| GET | `/api/v1/nodes/{id}` | any node, fully described (MD/DFT/sampling/training blocks, code params, attrs, software versions) |
+| GET | `/api/v1/nodes?kind=calculations\|models\|jobs\|files` | list nodes |
+| GET | `/api/v1/nodes/{id}/provenance?direction=up\|down\|both&depth=` | provenance subgraph `{root, direction, nodes[{id, kind, name, status, subtitle, level}], edges[{src, dst, relation, role, source, attrs}]}` |
+| GET | `/api/v1/relations` | relation vocabulary |
+| GET | `/api/v1/suggestions?dataset=` | relations suggested by shared frames |

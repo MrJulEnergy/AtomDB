@@ -667,6 +667,68 @@ def relate(
 
 @app.command()
 @handle_errors
+def search(
+    query: Annotated[str, typer.Argument(help="e.g. 'r2scan+d4 el:K,Cl T:400 model:MACE-MH-1'")]
+    = "",
+    element: Annotated[list[str], typer.Option("--element", "-e", help="Element (repeatable).")]
+    = [],
+    any_: Annotated[bool, typer.Option("--any", help="Elements combined with OR.")] = False,
+    frames: Annotated[bool, typer.Option(help="Return matching frames instead of datasets.")]
+    = False,
+    limit: int = 50,
+    offset: int = 0,
+    sort: str = "-created",
+    json_: JsonOpt = False,
+):
+    """Search datasets (or frames). Syntax: see `atomdb search --help` / docs/CLI.md."""
+    from ..services.search import parse, search_frames
+    from ..services.search import search as do_search
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        if frames:
+            pq = parse(query, element, any_)
+            data = search_frames(s, all_elements=pq.elements_all or None,
+                                 any_elements=pq.elements_any or None, offset=offset, limit=limit)
+        else:
+            data = do_search(s, query, elements=element, any_elements=any_, offset=offset,
+                             limit=limit, sort=sort)
+
+    def human(d):
+        if frames:
+            table(["DATASET", "FRAME", "ATOMS", "FORMULA", "E/ATOM", "FMAX"],
+                  [[i["dataset"], i["frame"], i["n_atoms"], i["formula"],
+                    f"{i['energy_per_atom']:.4f}" if i["energy_per_atom"] is not None else "",
+                    f"{i['fmax']:.3f}" if i["fmax"] is not None else ""] for i in d["items"]])
+            print(f"({len(d['items'])} of {d['total']} frames in {len(d['per_dataset'])} datasets)")
+            return
+        print("query: " + ("; ".join(d["interpreted"]) or "(everything)"))
+        table(["ID", "NAME", "FRAMES", "ELEMENTS", "FUNCTIONAL", "DISP", "MODEL", "T [K]"],
+              [[i.id, i.name, i.n_frames, " ".join(i.elements),
+                ",".join(i.extra.get("functional", [])), ",".join(i.extra.get("dispersion", [])),
+                ",".join(i.extra.get("model", [])), ",".join(i.extra.get("temperature", []))]
+               for i in d["items"]])
+        print(f"({len(d['items'])} of {d['total']})")
+
+    emit(data, human)
+
+
+@app.command()
+@handle_errors
+def reindex(json_: JsonOpt = False):
+    """Rebuild the search index (normally maintained automatically)."""
+    from ..services.facets import rebuild_all
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        n = rebuild_all(s)
+    emit({"datasets": n}, lambda d: print(f"reindexed {d['datasets']} datasets"))
+
+
+@app.command()
+@handle_errors
 def suggest(
     node_id: Annotated[str | None, typer.Argument(help="Only suggestions for this dataset.")]
     = None,

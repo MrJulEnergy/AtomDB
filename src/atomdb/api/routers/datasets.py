@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from ...schemas import DatasetDetail, Page
+from ...schemas import DatasetDetail
 from ...services import AtomDB
 from ...services import datasets as dsvc
 from ..deps import get_adb
@@ -10,17 +10,19 @@ from ..deps import get_adb
 router = APIRouter(tags=["datasets"])
 
 
-@router.get("/datasets", response_model=Page)
+@router.get("/datasets")
 def list_datasets(
+    q: str = "",
     offset: int = 0,
     limit: int = Query(50, le=1000),
-    tag: str | None = None,
+    sort: str = "-created",
     adb: AtomDB = Depends(get_adb),
 ):
+    """Dataset summaries with key provenance facets; `q` uses the search language."""
+    from ...services.search import search
+
     with adb.session() as s:
-        total, rows = dsvc.list_datasets(s, offset=offset, limit=limit, tag=tag)
-        items = [dsvc.summary(s, d) for d in rows]
-    return Page(total=total, offset=offset, limit=limit, items=items)
+        return search(s, q, offset=offset, limit=limit, sort=sort)
 
 
 @router.get("/datasets/{ds_id}", response_model=DatasetDetail)

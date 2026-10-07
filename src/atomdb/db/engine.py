@@ -57,13 +57,28 @@ def upgrade(engine: Engine) -> None:
     command.upgrade(alembic_config(engine), "head")
 
 
+class AtomSession(Session):
+    """Session class with atomdb's consistency hooks (search facets)."""
+
+
+def _install_hooks() -> None:
+    from ..services.facets import install
+
+    install(AtomSession)
+
+
 class Database:
     """Opened atomdb store: paths + engine + session factory."""
+
+    _hooks_installed = False
 
     def __init__(self, paths: StorePaths, engine: Engine):
         self.paths = paths
         self.engine = engine
-        self._sessionmaker = sessionmaker(engine, expire_on_commit=False)
+        if not Database._hooks_installed:
+            _install_hooks()
+            Database._hooks_installed = True
+        self._sessionmaker = sessionmaker(engine, expire_on_commit=False, class_=AtomSession)
 
     @contextmanager
     def session(self):

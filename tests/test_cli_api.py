@@ -118,3 +118,24 @@ def test_cli_provenance_workflow(home, data_dir, tmp_path):
     res = run("annotate", sel, "--set", "config_note=checked", "--note", "looks fine", "--json")
     assert json.loads(run("info", sel, "--json").output)["data"]["attrs"]["config_note"][
         "value"] == "checked"
+
+
+def test_api_provenance_and_search(adb, data_dir):
+    from atomdb.services.importer import import_file
+    from atomdb.services.records import record_dft
+
+    ds = import_file(adb, data_dir / "kcl_labeled.extxyz").dataset.id
+    with adb.session() as s:
+        dft = record_dft(s, [ds], dft={"code": "CP2K", "functional": "r2scan", "dispersion": "d4"}).id
+    c = TestClient(create_app(adb))
+    g = c.get(f"/api/v1/nodes/{ds}/provenance", params={"direction": "up"}).json()
+    assert dft in {n["id"] for n in g["nodes"]}
+    assert c.get(f"/api/v1/nodes/{dft}").json()["dft"]["functional"] == "r2SCAN"
+    r = c.get("/api/v1/search", params={"q": "r2scan+d4 el:K,Cl"}).json()
+    assert r["total"] == 1 and r["items"][0]["extra"]["functional"] == ["r2SCAN"]
+    assert c.get("/api/v1/datasets", params={"q": "functional:pbe"}).json()["total"] == 0
+    els = c.get("/api/v1/elements").json()
+    assert {e["symbol"] for e in els["elements"]} == {"H", "O", "Cl", "K"}
+    fr = c.get("/api/v1/frames", params=[("all", "K"), ("all", "Cl")]).json()
+    assert fr["total"] == 4
+    assert c.get(f"/api/v1/datasets/{ds}/completeness").json()["complete"] is False

@@ -69,6 +69,7 @@ Lookups accept lower case and short numbers (`ds-2026-142`).
 |---|---|
 | `frame` | one row per frame: `n_atoms`, `formula`, `elem_mask_lo/hi` (element bitmask: Z 1–62 / 63–118), `energy`, `energy_per_atom`, `fmax`, `temperature`, `volume`, `time`, `step`, `fingerprint` |
 | `dataset_element` | per dataset and element: frames containing it, atom count |
+| `dataset_facet` | search index: (dataset, key, value, num) aggregated from the upstream graph — functional, functional_key, dispersion, code, basis, pseudopotential, temperature, pressure, ensemble, model, model_key, model_family, enhanced_sampling, sampling_method, cluster, job_id, ancestor, source_dataset, tag, `attr:<key>`. Derived; refreshed automatically by a `before_commit` hook for every dataset downstream of changed provenance |
 | `property_def` | every field in the file: origin (atoms/info/arrays/calc), name, level (frame/atom/cell), dtype, shape (−1 = n_atoms), unit, count, `label_calc_id` (calculation that computed it) |
 
 ### File bookkeeping
