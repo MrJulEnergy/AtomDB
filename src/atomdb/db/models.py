@@ -82,6 +82,7 @@ class Node(Base):
 
     tags: Mapped[list[Tag]] = relationship(secondary="node_tag", lazy="selectin")
     notes: Mapped[list[Note]] = relationship(back_populates="node", lazy="selectin")
+    attrs: Mapped[list[NodeAttr]] = relationship(lazy="selectin", cascade="all, delete-orphan")
 
     __mapper_args__ = {"polymorphic_on": "kind", "polymorphic_identity": "node"}
 
@@ -181,7 +182,179 @@ class Calculation(Node):
     #: reproducibility snapshot, e.g. {"python": "3.12.10", "ase": "3.29.0", "atomdb": ...}
     software_versions: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
+    md: Mapped[MDParams | None] = relationship(lazy="selectin", cascade="all, delete-orphan")
+    dft: Mapped[DFTParams | None] = relationship(lazy="selectin", cascade="all, delete-orphan")
+    sampling: Mapped[SamplingOp | None] = relationship(
+        lazy="selectin", cascade="all, delete-orphan"
+    )
+    training: Mapped[TrainingRun | None] = relationship(
+        lazy="selectin", cascade="all, delete-orphan"
+    )
+    enhanced_sampling: Mapped[list[EnhancedSampling]] = relationship(
+        lazy="selectin", cascade="all, delete-orphan"
+    )
+    params: Mapped[list[CalcParam]] = relationship(lazy="selectin", cascade="all, delete-orphan")
+
     __mapper_args__ = {"polymorphic_identity": "calculation"}
+
+
+class MDParams(Base):
+    """Molecular dynamics settings of an MD calculation."""
+
+    __tablename__ = "md_params"
+    calc_id: Mapped[str] = mapped_column(ForeignKey("calculation.node_id"), primary_key=True)
+    engine: Mapped[str | None] = mapped_column(String(64))  # ASE, LAMMPS, CP2K, GROMACS, apax...
+    engine_version: Mapped[str | None] = mapped_column(String(64))
+    ensemble: Mapped[str | None] = mapped_column(String(16), index=True)  # NVE/NVT/NPT/...
+    temperature_k: Mapped[float | None] = mapped_column(Float, index=True)
+    pressure_bar: Mapped[float | None] = mapped_column(Float)
+    timestep_fs: Mapped[float | None] = mapped_column(Float)
+    n_steps: Mapped[int | None] = mapped_column(BigInteger)
+    length_ps: Mapped[float | None] = mapped_column(Float)
+    thermostat: Mapped[str | None] = mapped_column(String(64))
+    barostat: Mapped[str | None] = mapped_column(String(64))
+    integrator: Mapped[str | None] = mapped_column(String(64))
+    seed: Mapped[int | None] = mapped_column(BigInteger)
+    density_g_cm3: Mapped[float | None] = mapped_column(Float)
+    pbc: Mapped[str | None] = mapped_column(String(16))
+    initial_velocities: Mapped[str | None] = mapped_column(String(128))
+    save_interval: Mapped[int | None] = mapped_column(Integer)
+
+
+class DFTParams(Base):
+    """Electronic-structure settings of a DFT calculation (labels)."""
+
+    __tablename__ = "dft_params"
+    calc_id: Mapped[str] = mapped_column(ForeignKey("calculation.node_id"), primary_key=True)
+    code: Mapped[str | None] = mapped_column(String(64), index=True)
+    code_version: Mapped[str | None] = mapped_column(String(64))
+    functional: Mapped[str | None] = mapped_column(String(64), index=True)  # canonical
+    functional_raw: Mapped[str | None] = mapped_column(String(256))
+    dispersion: Mapped[str | None] = mapped_column(String(32), index=True)  # none/D3/D3BJ/D4
+    basis: Mapped[str | None] = mapped_column(String(256))
+    pseudopotential: Mapped[str | None] = mapped_column(String(256))
+    cutoff_ry: Mapped[float | None] = mapped_column(Float)
+    rel_cutoff_ry: Mapped[float | None] = mapped_column(Float)
+    eps_scf: Mapped[float | None] = mapped_column(Float)
+    smearing: Mapped[str | None] = mapped_column(String(64))
+    charge: Mapped[int | None] = mapped_column(Integer)
+    multiplicity: Mapped[int | None] = mapped_column(Integer)
+    spin_polarized: Mapped[bool | None] = mapped_column(Boolean)
+    kpoints: Mapped[str | None] = mapped_column(String(64))
+    labels: Mapped[list[Any] | None] = mapped_column(JSON)  # ["energy","forces","stress"]
+
+
+class CalcParam(Base):
+    """Arbitrary code settings (e.g. the flattened CP2K input tree)."""
+
+    __tablename__ = "calc_param"
+    calc_id: Mapped[str] = mapped_column(ForeignKey("calculation.node_id"), primary_key=True)
+    key: Mapped[str] = mapped_column(String(256), primary_key=True)  # e.g. FORCE_EVAL/DFT/SCF/EPS_SCF
+    value: Mapped[Any] = mapped_column(JSON)
+    unit: Mapped[str | None] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(16), default="user")  # parsed|user|inferred
+
+
+class EnhancedSampling(Base):
+    __tablename__ = "enhanced_sampling"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    calc_id: Mapped[str] = mapped_column(ForeignKey("calculation.node_id"), index=True)
+    method: Mapped[str] = mapped_column(String(32), index=True)  # metad/opes/umbrella/abf/...
+    software: Mapped[str | None] = mapped_column(String(64))
+    version: Mapped[str | None] = mapped_column(String(64))
+    collective_variables: Mapped[list[Any] | None] = mapped_column(JSON)
+    bias: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    input_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.node_id"))
+
+
+class SamplingOp(Base):
+    __tablename__ = "sampling_op"
+    calc_id: Mapped[str] = mapped_column(ForeignKey("calculation.node_id"), primary_key=True)
+    method: Mapped[str] = mapped_column(String(32))  # random/stride/uncertainty/fps/manual/filter
+    criterion: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    seed: Mapped[int | None] = mapped_column(BigInteger)
+    n_selected: Mapped[int | None] = mapped_column(Integer)
+
+
+class TrainingRun(Base):
+    __tablename__ = "training_run"
+    calc_id: Mapped[str] = mapped_column(ForeignKey("calculation.node_id"), primary_key=True)
+    hyperparameters: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    config_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.node_id"))
+
+
+class Model(Node):
+    """An interatomic potential (MLIP checkpoint or foundation model)."""
+
+    __tablename__ = "model"
+    node_id: Mapped[str] = mapped_column(ForeignKey("node.id"), primary_key=True)
+    family: Mapped[str | None] = mapped_column(String(64), index=True)  # MACE, NequIP, apax...
+    version: Mapped[str | None] = mapped_column(String(64))
+    architecture: Mapped[str | None] = mapped_column(String(128))
+    checkpoint_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.node_id"))
+    cutoff: Mapped[float | None] = mapped_column(Float)
+    n_parameters: Mapped[int | None] = mapped_column(BigInteger)
+    package: Mapped[str | None] = mapped_column(String(64))
+    package_version: Mapped[str | None] = mapped_column(String(64))
+    git_commit: Mapped[str | None] = mapped_column(String(64))
+    trained_at: Mapped[datetime | None]
+    url: Mapped[str | None] = mapped_column(Text)
+    hyperparameters: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    __mapper_args__ = {"polymorphic_identity": "model", "inherit_condition": node_id == Node.id}
+
+
+class HPCJob(Node):
+    __tablename__ = "hpc_job"
+    node_id: Mapped[str] = mapped_column(ForeignKey("node.id"), primary_key=True)
+    cluster: Mapped[str | None] = mapped_column(String(128), index=True)
+    partition: Mapped[str | None] = mapped_column(String(128))
+    job_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    array_job_id: Mapped[str | None] = mapped_column(String(64))
+    array_task_id: Mapped[str | None] = mapped_column(String(32))
+    user: Mapped[str | None] = mapped_column(String(64))
+    workdir: Mapped[str | None] = mapped_column(Text)
+    submit_script_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.node_id"))
+    nodes: Mapped[str | None] = mapped_column(String(256))
+    n_nodes: Mapped[int | None] = mapped_column(Integer)
+    n_tasks: Mapped[int | None] = mapped_column(Integer)
+    n_cpus: Mapped[int | None] = mapped_column(Integer)
+    n_gpus: Mapped[int | None] = mapped_column(Integer)
+    gpu_type: Mapped[str | None] = mapped_column(String(64))
+    mem: Mapped[str | None] = mapped_column(String(32))
+    time_limit: Mapped[str | None] = mapped_column(String(32))
+    start: Mapped[datetime | None]
+    end: Mapped[datetime | None]
+    state: Mapped[str | None] = mapped_column(String(32))
+    sbatch_options: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    __mapper_args__ = {"polymorphic_identity": "hpc_job", "inherit_condition": node_id == Node.id}
+
+
+class NodeAttr(Base):
+    """User/parsed metadata on any node that has no dedicated column."""
+
+    __tablename__ = "node_attr"
+    node_id: Mapped[str] = mapped_column(ForeignKey("node.id"), primary_key=True)
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    value: Mapped[Any] = mapped_column(JSON)
+    unit: Mapped[str | None] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(16), default="user")
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+
+class FrameLink(Base):
+    """Frame-level lineage: child frame was taken from parent frame."""
+
+    __tablename__ = "frame_link"
+    child_dataset: Mapped[str] = mapped_column(ForeignKey("dataset.node_id"), primary_key=True)
+    child_idx: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_dataset: Mapped[str] = mapped_column(ForeignKey("dataset.node_id"), primary_key=True)
+    parent_idx: Mapped[int] = mapped_column(Integer)
+    via_calc: Mapped[str | None] = mapped_column(ForeignKey("node.id"))
+
+    __table_args__ = (Index("ix_frame_link_parent", "parent_dataset", "parent_idx"),)
 
 
 class Edge(Base):

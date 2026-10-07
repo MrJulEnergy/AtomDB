@@ -129,6 +129,7 @@ def _item(adb: AtomDB, p: Path, kind: str, fmt: str | None, content_check: bool)
         "path": str(p), "kind": kind, "format": fmt, "sha256": sha,
         "size_bytes": p.stat().st_size, "status": "new", "known_as": [],
         "import": True, "name": _suggest_name(p), "tags": [], "description": None,
+        "metadata": {}, "links": [],
     }
     with adb.session() as s:
         f = s.execute(select(File).where(File.sha256 == sha)).scalar_one_or_none()
@@ -152,6 +153,10 @@ PLAN_HEADER = """\
 #  - set `import: false` to skip an item
 #  - kind: dataset | raw | model
 #  - name / description / tags are applied to the new dataset
+#  - metadata: e.g. {{temperature: 400, model: MACE-MH-1, functional: r2SCAN,
+#              dispersion: D4, code: CP2K, sampled_from: DS-2026-000003, source: /work/run}}
+#    MD/DFT/sampling keys create structured provenance records; others become metadata
+#  - links: [{{relation: derived_from, target: DS-2026-000003}}]
 #  - read_options: e.g. {{type_map: "1=K,2=Cl"}} for LAMMPS files
 # Items with status `in_db` are already stored (identical bytes).
 """
@@ -197,6 +202,12 @@ def execute_plan(adb: AtomDB, plan: dict, dry_run: bool = False) -> list[dict]:
                     tags=item.get("tags") or [], fmt=item.get("format"),
                     read_options=item.get("read_options") or {},
                 )
+                if (item.get("metadata") or item.get("links")) and not r.duplicate:
+                    from .annotate import apply_annotations
+
+                    with adb.session() as s:
+                        apply_annotations(s, r.dataset.id, item.get("metadata") or {},
+                                          item.get("links") or [])
             else:
                 r = import_raw(adb, item["path"], tags=item.get("tags") or [])
             results.append({"path": item["path"], "action": "imported",

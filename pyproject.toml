@@ -42,6 +42,7 @@ filterwarnings = [
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["src/atomdb/db/migrations/versions"]
 
 [tool.ruff.lint]
 # B008/B006: FastAPI Depends and Typer list options are idiomatic; RUF012: SQLAlchemy mapper args

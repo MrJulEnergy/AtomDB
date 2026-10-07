@@ -67,11 +67,59 @@ per item; other items still import.
 ### `atomdb formats`
 Supported formats and their capabilities.
 
-### `atomdb info ID`
-Everything known about a dataset: counts, elements, files, checksums, origins.
+### Provenance shortcuts on `import`
+`--temperature K --pressure BAR --ensemble E --timestep FS --model NAME|ID` record the MD
+run that generated the file; `--source DIR` its working directory; `--sampled-from DS
+[--sampling-method M]` a sampling step (frames linked by structure); `--code --functional
+--dispersion --basis --pseudopotential [--labeled-from DS]` a DFT labeling calculation;
+`--set key=value` other metadata; `--note TEXT`. Applied in the same transaction.
 
-### `atomdb ls [--limit N] [--offset N] [--tag T]`
-List datasets, newest first.
+```bash
+atomdb import /work/jpeters/project/run_042/output.extxyz \
+    --temperature 400 --model mace-mh-1 --source /work/jpeters/project/run_042/
+```
+
+### `atomdb info ID`
+Everything known about any node (dataset, calculation, model, job, file).
+
+### `atomdb provenance ID [--up] [--down] [--depth N] [--frame IDX] [--format tree|json|dot]`
+**Where did this come from?** (`--up`, default) and **what was this used for?** (`--down`),
+or both. `--frame` additionally prints a single frame's lineage across datasets.
+
+### `atomdb ls [datasets|calculations|models|jobs|files] [--limit N] [--offset N] [--tag T]`
+List nodes, newest first.
+
+### `atomdb record md --output DS [--input DS] [--model M] [--temperature K] [--ensemble E] ...`
+Full MD record: engine, ensemble, temperature, pressure, timestep, steps, length, thermostat,
+barostat, integrator, seed, save interval; enhanced sampling via `--enhanced-sampling
+METHOD --cv ... --bias key=value` or `--plumed plumed.dat` (parsed and stored);
+`--param key=value`, `--input-file F` (stored), `--job JOB-ID`, `--placeholder`.
+
+### `atomdb record dft --output DS [--input DS] --code --functional --dispersion ...`
+DFT labeling: code/version, functional, dispersion, basis, pseudopotential, `--cutoff`,
+`--rel-cutoff` (Ry), `--eps-scf`, smearing, charge, multiplicity, k-points, `--labels
+energy,forces,stress`. Marks those properties of the output as computed by this
+calculation and links output frames to input frames.
+
+### `atomdb record sampling --parent DS --child DS --method M [--criterion k=v] [--frame-map F]`
+Frame selection. Frames are linked by structure unless an explicit map is given.
+
+### `atomdb record training --model M --train DS [--validation DS] [--hyperparam k=v] [--config F]`
+
+### `atomdb model add [CHECKPOINT] --name N [--family F --version V --cutoff RC ...] [--trained-on DS]`
+Register a model; checkpoint may be a file or directory (all files stored). Without a
+checkpoint (foundation models) use `--url`. Fills in a placeholder of the same name.
+
+### `atomdb model ls`
+
+### `atomdb annotate ID [--set key=value]... [--note T] [--name N] [--description D]`
+Add provenance later; for datasets, MD/DFT/sampling keys create structured records.
+
+### `atomdb relate SRC RELATION DST [--role R]`
+Add any relation (see PROVENANCE.md).
+
+### `atomdb merge PLACEHOLDER REAL`
+Replace a placeholder node by the real one everywhere.
 
 ### `atomdb tag ID TAG...`
 Add tags.

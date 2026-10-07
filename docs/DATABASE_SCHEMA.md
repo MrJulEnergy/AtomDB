@@ -43,6 +43,34 @@ Lookups accept lower case and short numbers (`ds-2026-142`).
 | `dataset` | `n_frames`, `n_atoms_min/max/total`, `formula_summary`, `has_energy/forces/stress`, `energy_min/max`, `fmax_max`, `primary_file_id`, `content_fingerprint`, `source_text` |
 | `file` | `sha256` (unique), `size_bytes`, `format`, `store_relpath` |
 
+| `calculation` | `calc_type` (md/dft/sampling/training/conversion/import/...), `started_at`, `ended_at`, `command`, `workdir`, `exit_status`, `parameters` (JSON), `software_versions` (JSON snapshot: atomdb + git commit, python, ase, h5py, numpy, znh5md, ...) |
+| `model` | `family`, `version`, `architecture`, `checkpoint_file_id`, `cutoff`, `n_parameters`, `package`, `package_version`, `git_commit`, `trained_at`, `url`, `hyperparameters` |
+| `hpc_job` | `cluster`, `partition`, `job_id`, `array_job_id`, `array_task_id`, `user`, `workdir`, `submit_script_file_id`, `nodes`, `n_nodes`, `n_tasks`, `n_cpus`, `n_gpus`, `gpu_type`, `mem`, `time_limit`, `start`, `end`, `state`, `sbatch_options` |
+
+### Typed calculation details
+| Table | Columns |
+|---|---|
+| `md_params` | engine, engine_version, ensemble, temperature_k, pressure_bar, timestep_fs, n_steps, length_ps, thermostat, barostat, integrator, seed, density_g_cm3, pbc, initial_velocities, save_interval |
+| `dft_params` | code, code_version, functional (canonical), functional_raw, dispersion, basis, pseudopotential, cutoff_ry, rel_cutoff_ry, eps_scf, smearing, charge, multiplicity, spin_polarized, kpoints, labels |
+| `enhanced_sampling` | method, software, version, collective_variables, bias, input_file_id |
+| `sampling_op` | method, criterion, seed, n_selected |
+| `training_run` | hyperparameters, metrics, config_file_id |
+| `calc_param` | (calc_id, key) → value (JSON), unit, source — arbitrary code settings |
+| `node_attr` | (node_id, key) → value (JSON), unit, source — metadata without a dedicated column |
+
+### Provenance graph
+| Table | Purpose |
+|---|---|
+| `edge` | `src`, `dst`, `relation`, `role`, `source` (auto/parsed/user/inferred), `attrs`, unique per (src, dst, relation, role) — see PROVENANCE.md |
+| `frame_link` | frame-level lineage (child dataset/frame → parent dataset/frame, via calculation) |
+
+### Frame index and metadata catalog
+| Table | Purpose |
+|---|---|
+| `frame` | one row per frame: `n_atoms`, `formula`, `elem_mask_lo/hi` (element bitmask: Z 1–62 / 63–118), `energy`, `energy_per_atom`, `fmax`, `temperature`, `volume`, `time`, `step`, `fingerprint` |
+| `dataset_element` | per dataset and element: frames containing it, atom count |
+| `property_def` | every field in the file: origin (atoms/info/arrays/calc), name, level (frame/atom/cell), dtype, shape (−1 = n_atoms), unit, count, `label_calc_id` (calculation that computed it) |
+
 ### File bookkeeping
 | Table | Purpose |
 |---|---|
