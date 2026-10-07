@@ -26,10 +26,21 @@
 ### `atomdb init`
 Create or upgrade the store. Idempotent; never deletes anything.
 
-### `atomdb import FILE... [--name N] [--description D] [--tag T]... [--format F]`
-Copy files into the content-addressed store and create datasets. Importing identical
-bytes again is detected by SHA256: no new dataset is created, the new location is
-recorded as an additional origin.
+### `atomdb import FILE... [--name N] [--description D] [--tag T]... [--format F] [--type-map M] [--raw]`
+Copy files into the content-addressed store and create datasets. The original is kept
+byte-for-byte; non-H5MD inputs additionally get a verified canonical H5MD. Importing
+identical bytes again is detected by SHA256: no new dataset is created, the new location
+is recorded as an additional origin. `--type-map 1=K,2=Cl` is needed for LAMMPS files
+without element info. `--raw` stores any file without parsing it.
+
+### `atomdb convert INPUT OUTPUT [--to F] [--from F] [--allow-loss] [--overwrite] [--no-record]`
+Convert a file (or a dataset ID → its canonical H5MD) to another format. Fields the
+target cannot represent are listed; the conversion is refused (exit 6, `data_loss`)
+unless `--allow-loss`. Output files are never overwritten without `--overwrite`. If a
+store exists, the conversion is recorded (`CNV-…`) and the output stored.
+
+### `atomdb formats`
+Supported formats and their capabilities.
 
 ### `atomdb info ID`
 Everything known about a dataset: counts, elements, files, checksums, origins.

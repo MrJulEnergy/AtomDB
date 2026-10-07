@@ -52,3 +52,20 @@ def test_api_lists_datasets(adb, tmp_path):
     assert client.get(f"/api/v1/datasets/{r.dataset.id}").status_code == 200
     err = client.get("/api/v1/datasets/DS-2026-000777")
     assert err.status_code == 404 and err.json()["error"]["code"] == "not_found"
+
+
+def test_cli_convert_reports_loss(home, data_dir, tmp_path):
+    run("init")
+    res = run("convert", str(data_dir / "kcl_labeled.extxyz"), str(tmp_path / "o.xyz"),
+              "--to", "xyz", "--json")
+    assert res.exit_code == 6
+    assert "calc.forces" in json.loads(res.output)["error"]["details"]["lost"]
+    res = run("convert", str(data_dir / "kcl_labeled.extxyz"), str(tmp_path / "o.h5"), "--json")
+    assert res.exit_code == 0 and json.loads(res.output)["data"]["lost_fields"] == []
+
+
+def test_cli_import_type_map(home, data_dir):
+    run("init")
+    res = run("import", str(data_dir / "kcl.dump"), "--type-map", "1=K,2=Cl", "--json")
+    assert res.exit_code == 0, res.output
+    assert json.loads(res.output)["data"][0]["dataset"]["elements"] == ["Cl", "K"]

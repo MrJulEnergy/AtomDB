@@ -10,7 +10,7 @@ import typer
 from .. import __version__
 from ..services import AtomDB
 from ..services import datasets as dsvc
-from ..services.importer import import_file
+from ..services.importer import import_file, import_raw
 from .output import emit, handle_errors, kv, state, table
 
 app = typer.Typer(
@@ -69,17 +69,28 @@ def import_(
     name: Annotated[str | None, typer.Option(help="Dataset name (default: file stem).")] = None,
     description: Annotated[str | None, typer.Option("--description", "-d")] = None,
     tag: Annotated[list[str], typer.Option("--tag", "-t", help="Tag (repeatable).")] = [],
-    fmt: Annotated[str | None, typer.Option("--format", help="Force a file format.")] = None,
+    fmt: Annotated[str | None, typer.Option("--format", "-f", help="Force a file format.")] = None,
+    type_map: Annotated[
+        str | None, typer.Option(help="LAMMPS type→element map, e.g. 1=K,2=Cl,3=O,4=H")
+    ] = None,
+    raw: Annotated[
+        bool, typer.Option(help="Store bytes without parsing (inputs, logs, checkpoints).")
+    ] = False,
     json_: JsonOpt = False,
 ):
-    """Import atomistic files into the store."""
+    """Import atomistic files into the store (original kept + canonical H5MD)."""
     _json(json_)
     adb = open_db()
-    results = [
-        import_file(adb, p, name=name if len(paths) == 1 else None, description=description,
-                    tags=tag, fmt=fmt)
-        for p in paths
-    ]
+    read_options = {"type_map": type_map} if type_map else {}
+    results = []
+    for p in paths:
+        if raw:
+            results.append(import_raw(adb, p, tags=tag))
+        else:
+            results.append(import_file(
+                adb, p, name=name if len(paths) == 1 else None, description=description,
+                tags=tag, fmt=fmt, read_options=read_options,
+            ))
 
     def human(rs):
         for r in rs:
@@ -88,6 +99,60 @@ def import_(
                 print(f"  warning: {w}")
 
     emit(results, human)
+
+
+@app.command()
+@handle_errors
+def convert(
+    src: Annotated[str, typer.Argument(help="Input file or dataset ID.")],
+    out: Annotated[Path, typer.Argument(help="Output file (never overwritten silently).")],
+    to: Annotated[str | None, typer.Option(help="Output format (default: from extension).")] = None,
+    fmt: Annotated[str | None, typer.Option("--from", help="Input format (default: detect).")] = None,
+    allow_loss: Annotated[bool, typer.Option(help="Accept dropping unrepresentable fields.")] = False,
+    overwrite: bool = False,
+    type_map: Annotated[str | None, typer.Option(help="LAMMPS type→element map.")] = None,
+    no_record: Annotated[bool, typer.Option(help="Do not record in the database.")] = False,
+    json_: JsonOpt = False,
+):
+    """Convert between formats. Lost fields are reported; lossy conversion needs --allow-loss."""
+    from ..config import get_paths
+    from ..services.converter import convert as do_convert
+
+    _json(json_)
+    adb = None if no_record or not get_paths(state.home).initialized else open_db()
+    r = do_convert(
+        adb, src, out, to=to, frm=fmt, allow_loss=allow_loss, overwrite=overwrite,
+        read_options={"type_map": type_map} if type_map else None,
+    )
+
+    def human(r):
+        print(f"{r['from']} → {r['to']}: {r['n_frames']} frames written to {r['output']}")
+        if r["lost_fields"]:
+            print(f"  LOST: {', '.join(r['lost_fields'])}")
+        if r["conversion_id"]:
+            print(f"  recorded as {r['conversion_id']}")
+
+    emit(r, human)
+
+
+@app.command()
+@handle_errors
+def formats(json_: JsonOpt = False):
+    """List supported file formats and what they can represent."""
+    from ..formats.registry import adapters
+
+    _json(json_)
+    data = [
+        {"name": a.name, "extensions": list(a.extensions), "read": a.readable,
+         "write": a.writable, "description": a.description,
+         "read_options": list(a.read_options), "capabilities": a.capabilities.to_dict()}
+        for a in adapters().values()
+    ]
+    emit(data, lambda d: table(
+        ["FORMAT", "EXT", "R", "W", "DESCRIPTION"],
+        [[x["name"], " ".join(x["extensions"]), "✓" if x["read"] else "", "✓" if x["write"] else "",
+          x["description"]] for x in d],
+    ))
 
 
 @app.command()
