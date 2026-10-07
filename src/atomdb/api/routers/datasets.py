@@ -63,3 +63,24 @@ def properties(ds_id: str, adb: AtomDB = Depends(get_adb)):
                          .order_by(PropertyDef.origin, PropertyDef.name)).scalars()
         return [{c.key: getattr(r, c.key) for c in r.__table__.columns if c.key != "dataset_id"}
                 for r in rows]
+
+
+@router.get("/datasets/{ds_id}/stats")
+def stats(ds_id: str, recompute: bool = False, adb: AtomDB = Depends(get_adb)):
+    """Streaming statistics + histograms (energy, E/atom, forces incl. per element, cell, ...)."""
+    from ...services.stats import dataset_stats
+
+    with adb.session() as s:
+        return dataset_stats(adb, s, ds_id, recompute=recompute)
+
+
+@router.get("/compare")
+def compare(ds: list[str] = Query(...), adb: AtomDB = Depends(get_adb)):
+    """Several datasets on common histogram bins, plus shift/overlap summary."""
+    from ...errors import InvalidInput
+    from ...services.stats import compare as do_compare
+
+    if len(ds) < 2:
+        raise InvalidInput("compare needs at least two datasets (?ds=A&ds=B)")
+    with adb.session() as s:
+        return do_compare(adb, s, ds)

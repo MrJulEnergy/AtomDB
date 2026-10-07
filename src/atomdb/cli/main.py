@@ -716,6 +716,80 @@ def search(
 
 @app.command()
 @handle_errors
+def stats(
+    node_id: str,
+    recompute: bool = False,
+    json_: JsonOpt = False,
+):
+    """Energy / force / structure statistics of a dataset (streamed, cached)."""
+    from ..services.stats import dataset_stats
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        st = dataset_stats(adb, s, node_id, recompute=recompute)
+
+    def human(st):
+        print(f"{st['dataset']}  {st['name']}  ({st['n_frames']} frames)")
+        rows = []
+        for k, q in st["quantities"].items():
+            if q.get("count"):
+                rows.append([k, q["unit"], q["count"], f"{q['min']:.6g}", f"{q['max']:.6g}",
+                             f"{q['mean']:.6g}", f"{q['std']:.4g}"])
+        table(["QUANTITY", "UNIT", "N", "MIN", "MAX", "MEAN", "STD"], rows)
+        if st.get("force_per_element"):
+            print("\n|F| per element [eV/Å]:")
+            table(["EL", "N", "MIN", "MAX", "MEAN", "STD"],
+                  [[el, q["count"], f"{q['min']:.4g}", f"{q['max']:.4g}", f"{q['mean']:.4g}",
+                    f"{q['std']:.4g}"] for el, q in st["force_per_element"].items()])
+        comp = st["composition"]
+        print(f"\ncompositions: {len(comp)}  (" + ", ".join(
+            f"{k}×{v}" for k, v in list(comp.items())[:6]) + (", …" if len(comp) > 6 else "") + ")")
+
+    emit(st, human)
+
+
+@app.command()
+@handle_errors
+def compare(
+    node_ids: Annotated[list[str], typer.Argument(help="Two or more dataset IDs.")],
+    json_: JsonOpt = False,
+):
+    """Compare distributions of datasets (first one is the reference)."""
+    from ..services.stats import compare as do_compare
+
+    _json(json_)
+    if len(node_ids) < 2:
+        raise InvalidInput("compare needs at least two datasets")
+    adb = open_db()
+    with adb.session() as s:
+        data = do_compare(adb, s, node_ids)
+
+    def human(d):
+        ds = d["datasets"]
+        keys = ["energy_per_atom", "force_norm", "fmax", "n_atoms", "temperature", "density",
+                "volume"]
+        for k in keys:
+            vals = [x["quantities"].get(k) for x in ds]
+            if not any(v and v.get("count") for v in vals):
+                continue
+            print(f"{k} [{next(v for v in vals if v)['unit']}]")
+            for x, v in zip(ds, vals, strict=True):
+                if v and v.get("count"):
+                    print(f"  {x['dataset']}  mean {v['mean']:.5g}  std {v['std']:.4g}  "
+                          f"range {v['min']:.5g} … {v['max']:.5g}")
+            for r in d["summary"].get(k, {}).get("vs", []):
+                print(f"    vs reference: {r['dataset']} shift {r['mean_shift_std']:+.2f} σ, "
+                      f"histogram overlap {r['hist_overlap']:.2f}")
+        for k, v in d["summary"].get("elements", {}).items():
+            if v:
+                print(f"elements differing from reference in {k}: {' '.join(v)}")
+
+    emit(data, human)
+
+
+@app.command()
+@handle_errors
 def reindex(json_: JsonOpt = False):
     """Rebuild the search index (normally maintained automatically)."""
     from ..services.facets import rebuild_all

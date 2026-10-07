@@ -17,6 +17,8 @@ codes as the CLI (see CLI.md); `not_found` → 404, `invalid_input`/`format_erro
 | GET | `/api/v1/datasets/{id}/frames/{idx}` | one frame, lazily read from H5MD: symbols, positions, cell, pbc, calc results, info, arrays |
 | GET | `/api/v1/datasets/{id}/properties` | catalog of every stored field (origin, level, dtype, shape, unit, label calculation) |
 | GET | `/api/v1/datasets/{id}/completeness` | provenance checklist |
+| GET | `/api/v1/datasets/{id}/stats?recompute=` | streaming statistics + histograms (`quantities`, `force_per_element`, `composition`) |
+| GET | `/api/v1/compare?ds=A&ds=B` | datasets on common bins + `summary` (mean shift in σ, histogram overlap) |
 | GET | `/api/v1/datasets/{id}/frames/{idx}/lineage` | frame-level lineage chain |
 | GET | `/api/v1/search?q=&element=&any=` | same as `/datasets` with element list, returns `interpreted` |
 | GET | `/api/v1/frames?all=K&all=Cl&any=&dataset=` | frames by element combination |
