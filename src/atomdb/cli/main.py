@@ -790,6 +790,93 @@ def compare(
 
 @app.command()
 @handle_errors
+def embed(
+    node_ids: Annotated[list[str], typer.Argument(help="Dataset IDs.")],
+    descriptor: str = "composition-rdf",
+    max_frames: Annotated[int, typer.Option(help="Frames sampled per dataset.")] = 500,
+    seed: int = 0,
+    out: Annotated[Path | None, typer.Option(help="Write points as JSON.")] = None,
+    json_: JsonOpt = False,
+):
+    """EXPLORATORY: descriptor + PCA projection of frames from several datasets."""
+    from ..services.embedding import embed as do_embed
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        r = do_embed(adb, s, node_ids, descriptor, max_frames, seed)
+    if out:
+        out.write_text(__import__("json").dumps(r))
+
+    def human(r):
+        print(r["note"])
+        print(f"descriptor {r['descriptor']} ({r['n_features']} features), "
+              f"PC1 {r['explained_variance'][0]:.1%}, PC2 {r['explained_variance'][1]:.1%}")
+        for d in r["datasets"]:
+            pts = [p for p in r["points"] if p["dataset"] == d["id"]]
+            if pts:
+                import numpy as np
+
+                c = np.array([[p["pc1"], p["pc2"]] for p in pts])
+                print(f"  {d['id']}  {len(pts)} frames  centroid ({c[:, 0].mean():+.2f}, "
+                      f"{c[:, 1].mean():+.2f})  spread {c.std(0).mean():.2f}")
+        if out:
+            print(f"points written to {out}")
+
+    emit(r, human)
+
+
+@app.command()
+@handle_errors
+def similarity(
+    reference: str,
+    other: str,
+    descriptor: str = "composition-rdf",
+    max_frames: int = 1000,
+    json_: JsonOpt = False,
+):
+    """Is OTHER genuinely different from REFERENCE? (descriptor novelty + distributions)"""
+    from ..services.embedding import similarity as do_sim
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        r = do_sim(adb, s, reference, other, descriptor, max_frames)
+
+    def human(r):
+        print(r["note"])
+        print(f"{r['other']} vs reference {r['reference']} ({r['descriptor']})")
+        print(f"  novel configurations: {r['novel_fraction']:.1%} of {r['n_other_frames']} frames "
+              f"(NN distance > 95th pct of reference-internal NN distance {r['novelty_threshold']:.3g})")
+        c = r["composition"]
+        if c["elements_only_in_other"] or c["elements_only_in_reference"]:
+            print(f"  elements only in other: {c['elements_only_in_other']}, only in reference: "
+                  f"{c['elements_only_in_reference']}")
+        for k in ("energy_per_atom", "force_norm", "n_atoms", "density"):
+            v = r["distributions"].get(k)
+            if v:
+                print(f"  {k}: shift {v['mean_shift_std']:+.2f} σ, overlap {v['hist_overlap']:.2f}")
+        print(f"  VERDICT: {r['verdict']}")
+        print("  most novel frames: " + ", ".join(
+            f"{m['dataset']}#{m['frame']}" for m in r["most_novel_frames"][:5]))
+
+    emit(r, human)
+
+
+@app.command()
+@handle_errors
+def descriptors(json_: JsonOpt = False):
+    """Available (pluggable) descriptors."""
+    from ..descriptors import list_descriptors
+
+    _json(json_)
+    emit(list_descriptors(), lambda ds: table(
+        ["NAME", "AVAILABLE", "DESCRIPTION"],
+        [[d["name"], "yes" if d["available"] else "no (extra)", d["description"]] for d in ds]))
+
+
+@app.command()
+@handle_errors
 def reindex(json_: JsonOpt = False):
     """Rebuild the search index (normally maintained automatically)."""
     from ..services.facets import rebuild_all

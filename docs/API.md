@@ -23,6 +23,9 @@ codes as the CLI (see CLI.md); `not_found` → 404, `invalid_input`/`format_erro
 | GET | `/api/v1/search?q=&element=&any=` | same as `/datasets` with element list, returns `interpreted` |
 | GET | `/api/v1/frames?all=K&all=Cl&any=&dataset=` | frames by element combination |
 | GET | `/api/v1/elements` | elements present (datasets / frames / atoms per element) |
+| GET | `/api/v1/embedding?ds=A&ds=B&descriptor=&max_frames=&seed=` | EXPLORATORY PCA projection: `points[{dataset, frame, pc1, pc2, energy_per_atom, fmax, ...}]`, `explained_variance` |
+| GET | `/api/v1/similarity?reference=&other=&descriptor=` | EXPLORATORY novelty fraction, most novel frames, element and distribution differences |
+| GET | `/api/v1/descriptors` | available descriptors |
 | GET | `/api/v1/nodes/{id}` | any node, fully described (MD/DFT/sampling/training blocks, code params, attrs, software versions) |
 | GET | `/api/v1/nodes?kind=calculations\|models\|jobs\|files` | list nodes |
 | GET | `/api/v1/nodes/{id}/provenance?direction=up\|down\|both&depth=` | provenance subgraph `{root, direction, nodes[{id, kind, name, status, subtitle, level}], edges[{src, dst, relation, role, source, attrs}]}` |

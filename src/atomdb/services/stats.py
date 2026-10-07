@@ -23,7 +23,7 @@ from ..errors import IntegrityProblem
 from .context import AtomDB
 from .datasets import get_dataset
 
-STATS_VERSION = 2
+STATS_VERSION = 3
 CHUNK = 256
 BINS = 60
 AMU_A3_TO_G_CM3 = 1.66053906660
@@ -199,7 +199,10 @@ FRAME_COLS = ("energy", "energy_per_atom", "fmax", "n_atoms", "volume", "tempera
 
 def compute(adb: AtomDB, s: Session, ds: Dataset, ranges: dict | None = None,
             bins: int = BINS) -> dict:
+    from .datasets import elements_of
+
     out: dict = {"dataset": ds.id, "name": ds.name, "n_frames": ds.n_frames,
+                 "elements": elements_of(s, ds),
                  "version": STATS_VERSION, "quantities": {}, "composition": {}}
     # frame-level: from the SQL index, in chunks
     run = {c: Running() for c in FRAME_COLS}
@@ -310,7 +313,7 @@ def _compare_summary(datasets: list[dict]) -> dict:
                          "hist_overlap": overlap})
         if rows:
             out[key] = {"reference": ref["dataset"], "vs": rows}
-    els0 = set(ref.get("force_per_element", {}))
-    out["elements"] = {d["dataset"]: sorted(set(d.get("force_per_element", {})) ^ els0)
+    els0 = set(ref.get("elements", []))
+    out["elements"] = {d["dataset"]: sorted(set(d.get("elements", [])) ^ els0)
                        for d in datasets[1:]}
     return out

@@ -177,6 +177,23 @@ The same statistics on common histogram bins plus, per quantity, the mean shift 
 of the pooled standard deviation and the histogram overlap (1 = identical, 0 = disjoint),
 and which elements differ.
 
+### `atomdb embed DS... [--descriptor composition-rdf|soap] [--max-frames N] [--seed S] [--out F.json]` — EXPLORATORY
+Sample frames (uniform, seeded), compute a descriptor, project with PCA (standardised,
+descriptor blocks equally weighted). Nothing is stored. The web page `/embedding` shows
+the scatter (click a point to open the frame).
+
+### `atomdb similarity REFERENCE OTHER [--descriptor D]` — EXPLORATORY
+"Are these datasets actually different?": fraction of OTHER frames whose nearest
+REFERENCE frame (descriptor space) is farther than the 95th percentile of
+reference-internal nearest-neighbour distances, the most novel frames, elements present
+in only one dataset, and energy/force/size distribution shifts.
+
+### `atomdb descriptors`
+Available descriptors: `composition-rdf` (built in: element fractions + per element-pair
+radial distribution histograms, PBC-aware) and `soap` (`uv sync --extra descriptors`).
+New descriptors subclass `atomdb.descriptors.Descriptor` and register under the
+`atomdb.descriptors` entry-point group.
+
 ### `atomdb reindex`
 Rebuild the search index. Normally unnecessary: facets are refreshed automatically on
 every commit that changes provenance.

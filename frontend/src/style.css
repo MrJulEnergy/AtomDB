@@ -142,3 +142,5 @@ td.ids a { display: block; }
 .ptable-legend { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); margin: 6px 0; }
 .ptable-legend span.sw { width: 22px; height: 12px; border: 1px solid var(--line); }
 .chart-card .hero { font-size: 22px; margin: 18px 0 8px; font-variant-numeric: tabular-nums; }
+.banner { border: 1px solid #b08a1c; color: #8a6a10; background: rgba(237, 161, 0, 0.08); padding: 6px 10px; margin-bottom: 10px; font-weight: 600; font-size: 12px; letter-spacing: 0.03em; }
+@media (prefers-color-scheme: dark) { .banner { color: #e0b44a; } }

@@ -3,6 +3,7 @@ import DatasetPage from "./pages/DatasetPage";
 import ComparePage from "./pages/ComparePage";
 import DatasetsPage from "./pages/DatasetsPage";
 import ElementsPage from "./pages/ElementsPage";
+import EmbeddingPage from "./pages/EmbeddingPage";
 import FramePage from "./pages/FramePage";
 import GraphPage from "./pages/GraphPage";
 import NodePage from "./pages/NodePage";
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/elements" element={<ElementsPage />} />
           <Route path="/stats" element={<StatsPage />} />
           <Route path="/compare" element={<ComparePage />} />
+          <Route path="/embedding" element={<EmbeddingPage />} />
           <Route path="*" element={<p className="muted">Not available yet.</p>} />
         </Routes>
       </main>

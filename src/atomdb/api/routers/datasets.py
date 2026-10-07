@@ -84,3 +84,31 @@ def compare(ds: list[str] = Query(...), adb: AtomDB = Depends(get_adb)):
         raise InvalidInput("compare needs at least two datasets (?ds=A&ds=B)")
     with adb.session() as s:
         return do_compare(adb, s, ds)
+
+
+@router.get("/embedding", tags=["exploratory"])
+def embedding(ds: list[str] = Query(...), descriptor: str = "composition-rdf",
+              max_frames: int = Query(300, le=5000), seed: int = 0,
+              adb: AtomDB = Depends(get_adb)):
+    """EXPLORATORY descriptor + PCA projection (not stored)."""
+    from ...services.embedding import embed
+
+    with adb.session() as s:
+        return embed(adb, s, ds, descriptor, max_frames, seed)
+
+
+@router.get("/similarity", tags=["exploratory"])
+def similarity(reference: str, other: str, descriptor: str = "composition-rdf",
+               max_frames: int = Query(1000, le=10000), adb: AtomDB = Depends(get_adb)):
+    """Descriptor-space novelty of OTHER relative to REFERENCE + distribution shifts."""
+    from ...services.embedding import similarity as sim
+
+    with adb.session() as s:
+        return sim(adb, s, reference, other, descriptor, max_frames)
+
+
+@router.get("/descriptors", tags=["exploratory"])
+def descriptors():
+    from ...descriptors import list_descriptors
+
+    return list_descriptors()
