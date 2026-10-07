@@ -36,3 +36,69 @@ dd { margin: 0; }
 .badge { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 3px; font-size: 12px; }
 .file { padding: 6px 0; border-bottom: 1px dashed var(--line); }
 @media (max-width: 700px) { .panel.wide { grid-column: span 1; } }
+
+/* --- layout helpers ---------------------------------------------------- */
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.panels.single { grid-template-columns: 1fr; }
+h3 { font-size: 12px; margin: 10px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.kv { display: contents; }
+.wrap { white-space: normal !important; }
+.table-wrap { overflow-x: auto; }
+table.grid.compact td, table.grid.compact th { padding: 2px 6px; font-size: 12px; }
+th.sortable { cursor: pointer; }
+th.sortable:hover { text-decoration: underline; }
+.dim-row td { opacity: 0.6; }
+.scroll-box { max-height: 420px; overflow: auto; }
+pre.code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg); border: 1px solid var(--line); padding: 6px; overflow: auto; max-height: 360px; margin: 4px 0; }
+code { font-family: ui-monospace, monospace; font-size: 12px; }
+
+/* --- controls ------------------------------------------------------------ */
+button, .btn, select, input { font: inherit; color: var(--fg); }
+button, .btn { background: var(--panel); border: 1px solid var(--line); padding: 4px 10px; cursor: pointer; border-radius: 3px; display: inline-block; }
+button:hover, .btn:hover { border-color: var(--accent); text-decoration: none; }
+button:disabled { opacity: 0.4; cursor: default; }
+.btn.primary, button.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 600; }
+input, select { background: var(--panel); border: 1px solid var(--line); padding: 4px 6px; border-radius: 3px; }
+.searchbar { display: flex; gap: 8px; margin-bottom: 8px; }
+.searchbar input { flex: 1; font-family: ui-monospace, monospace; padding: 6px 8px; }
+.examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip { font-family: ui-monospace, monospace; font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
+.pager { display: flex; gap: 12px; align-items: center; margin: 8px 0; }
+.filter { width: 180px; font-size: 12px; }
+.badge.warn { border-color: #b08a1c; color: #b08a1c; margin-left: 6px; }
+.labels span { display: inline-block; width: 16px; text-align: center; font-size: 11px; font-weight: 700; border: 1px solid var(--line); margin-right: 1px; }
+.labels .on { background: var(--accent-weak); color: var(--accent); border-color: var(--accent); }
+.labels .off { color: var(--dim); }
+.prov-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.prov-summary ul { margin: 0; padding-left: 18px; }
+.prov-summary li { margin: 2px 0; }
+.checklist { list-style: none; padding: 0; margin: 0; }
+.checklist li { padding: 2px 0; }
+.checklist .ok { color: var(--muted); }
+.checklist .missing { color: var(--bad); }
+.lineage { padding-left: 18px; margin: 0; }
+.lineage li { margin-bottom: 4px; }
+
+/* --- graph --------------------------------------------------------------- */
+.graph-layout { display: grid; grid-template-columns: 1fr 340px; gap: 12px; }
+.graph-canvas { height: calc(100vh - 190px); min-height: 420px; background: var(--panel); border: 1px solid var(--line); }
+.side { background: var(--panel); border: 1px solid var(--line); padding: 12px; overflow: auto; max-height: calc(100vh - 190px); }
+.side h2 { text-transform: none; color: var(--fg); }
+.toggles { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 8px; align-items: center; }
+.legend i { display: inline-block; width: 12px; height: 10px; border: 2px solid; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+@media (max-width: 900px) { .graph-layout { grid-template-columns: 1fr; } }
+
+/* --- frame viewer -------------------------------------------------------- */
+.frame-nav { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.frame-nav input[type=range] { flex: 1; min-width: 160px; }
+.frame-nav .scale { width: 60px; }
+.frame-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 12px; margin-bottom: 12px; }
+.viewer { position: relative; height: 560px; background: var(--panel); border: 1px solid var(--line); }
+@media (max-width: 900px) { .frame-layout { grid-template-columns: 1fr; } .viewer { height: 380px; } }
+.mono.small, .file .mono { overflow-wrap: anywhere; }
+.prov-summary li, .lineage li, dd { overflow-wrap: anywhere; }
+td.name { min-width: 180px; }
+td.ids a { display: block; }
+.badge + .badge { margin-left: 4px; }
