@@ -183,6 +183,19 @@ export async function get<T>(path: string, params?: Params): Promise<T> {
   return body as T;
 }
 
+export async function post<T>(path: string, body?: unknown, params?: Params): Promise<T> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params ?? {})) if (v !== undefined && v !== "") qs.set(k, String(v));
+  const res = await fetch(`/api/v1${path}${qs.toString() ? `?${qs}` : ""}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new ApiError(data?.error?.code ?? "error", data?.error?.message ?? res.statusText);
+  return data as T;
+}
+
 export function nodeHref(id: string): string {
   return id.startsWith("DS-") ? `/datasets/${id}` : `/nodes/${id}`;
 }

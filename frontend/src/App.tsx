@@ -6,6 +6,7 @@ import ElementsPage from "./pages/ElementsPage";
 import EmbeddingPage from "./pages/EmbeddingPage";
 import FramePage from "./pages/FramePage";
 import GraphPage from "./pages/GraphPage";
+import IntegrityPage from "./pages/IntegrityPage";
 import NodePage from "./pages/NodePage";
 import NodesPage from "./pages/NodesPage";
 import StatsPage from "./pages/StatsPage";
@@ -24,6 +25,7 @@ export default function App() {
           <NavLink to="/list/calculations">Calculations</NavLink>
           <NavLink to="/list/models">Models</NavLink>
           <NavLink to="/list/jobs">HPC jobs</NavLink>
+          <NavLink to="/integrity">Integrity</NavLink>
         </nav>
       </header>
       <main>
@@ -38,6 +40,7 @@ export default function App() {
           <Route path="/stats" element={<StatsPage />} />
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/embedding" element={<EmbeddingPage />} />
+          <Route path="/integrity" element={<IntegrityPage />} />
           <Route path="*" element={<p className="muted">Not available yet.</p>} />
         </Routes>
       </main>

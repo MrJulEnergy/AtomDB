@@ -31,3 +31,16 @@ codes as the CLI (see CLI.md); `not_found` → 404, `invalid_input`/`format_erro
 | GET | `/api/v1/nodes/{id}/provenance?direction=up\|down\|both&depth=` | provenance subgraph `{root, direction, nodes[{id, kind, name, status, subtitle, level}], edges[{src, dst, relation, role, source, attrs}]}` |
 | GET | `/api/v1/relations` | relation vocabulary |
 | GET | `/api/v1/suggestions?dataset=` | relations suggested by shared frames |
+
+## Actions (POST; paths refer to the machine running the server)
+
+| Method | Path | Body / params | Description |
+|---|---|---|---|
+| POST | `/api/v1/import` | `{path, name?, description?, tags?, format?, read_options?, metadata?}` | import a file; `metadata` = provenance shortcuts (temperature, model, source, sampled_from, functional, dispersion, code, …) |
+| POST | `/api/v1/import-run` | `{path, execute=false, cluster?, calc_type?, inputs?, sampled_from?, model?}` | plan (default) or execute a run-directory import |
+| POST | `/api/v1/convert` | `{input, output, to?, allow_loss=false}` | conversion; 409 `data_loss` lists lost fields |
+| POST | `/api/v1/whatis` | `{path}` | identify a file |
+| POST | `/api/v1/validate?dataset=&quick=true` | | integrity report |
+| POST | `/api/v1/backup` | | create a backup archive |
+| GET | `/api/v1/store` | | store location, sizes, backups |
+| GET | `/api/v1/schema` | | same as `atomdb schema --json` |

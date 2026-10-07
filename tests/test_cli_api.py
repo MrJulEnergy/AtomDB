@@ -171,3 +171,21 @@ def test_cli_validate_backup_schema(home, data_dir, tmp_path):
     assert r.exit_code == 0, r.output
     sc = json.loads(run("schema", "--json").output)["data"]
     assert "sampled_from" in sc["relations"] and "provenance" in sc["cli_commands"]
+
+
+def test_api_actions(adb, data_dir, tmp_path):
+    c = TestClient(create_app(adb))
+    r = c.post("/api/v1/import", json={"path": str(data_dir / "kcl_labeled.extxyz"),
+                                       "metadata": {"temperature": 400, "model": "MACE-MH-1"}})
+    assert r.status_code == 200, r.text
+    ds = r.json()["result"]["dataset"]["id"]
+    assert r.json()["recorded"][0].startswith("MD-")
+    plan = c.post("/api/v1/import-run", json={"path": str(data_dir / "run_cp2k_laufband")}).json()
+    assert plan["plan"]["calc"]["dft"]["functional"] == "r2SCAN" and "result" not in plan
+    w = c.post("/api/v1/whatis", json={"path": str(data_dir / "kcl_labeled.extxyz")}).json()
+    assert w["exact_match"]["datasets"][0]["id"] == ds
+    assert c.post("/api/v1/validate").json()["ok"]
+    bad = c.post("/api/v1/convert", json={"input": ds, "output": str(tmp_path / "x.xyz"), "to": "xyz"})
+    assert bad.status_code == 409 and bad.json()["error"]["code"] == "data_loss"
+    assert c.get("/api/v1/store").json()["root"] == str(adb.paths.root)
+    assert "relations" in c.get("/api/v1/schema").json()

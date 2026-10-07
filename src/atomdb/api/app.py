@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from .. import __version__
 from ..errors import AtomDBError
 from ..services import AtomDB
-from .routers import datasets, nodes
+from .routers import actions, datasets, nodes
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
 API_PREFIX = "/api/v1"
@@ -37,6 +37,7 @@ def create_app(adb: AtomDB) -> FastAPI:
 
     app.include_router(datasets.router, prefix=API_PREFIX)
     app.include_router(nodes.router, prefix=API_PREFIX)
+    app.include_router(actions.router, prefix=API_PREFIX)
 
     index = STATIC_DIR / "index.html"
     if (STATIC_DIR / "assets").is_dir():
