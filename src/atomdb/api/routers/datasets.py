@@ -97,6 +97,21 @@ def embedding(ds: list[str] = Query(...), descriptor: str = "composition-rdf",
         return embed(adb, s, ds, descriptor, max_frames, seed)
 
 
+@router.get("/embedding/atoms", tags=["exploratory"])
+def embedding_atoms(ds: list[str] = Query(...), descriptor: str = "mace-mp0-small",
+                    max_frames: int = Query(200, le=5000), max_atoms: int = Query(5000, le=50000),
+                    element: list[str] = Query([]), seed: int = 0, allow_large: bool = False,
+                    adb: AtomDB = Depends(get_adb)):
+    """EXPLORATORY per-atom (local environment) descriptor + joint PCA (not stored).
+
+    Large datasets (MPtrj-sized) are listed in ``skipped`` unless ``allow_large``."""
+    from ...services.embedding import embed_atoms
+
+    with adb.session() as s:
+        return embed_atoms(adb, s, ds, descriptor, max_frames, max_atoms, element or None, seed,
+                           allow_large)
+
+
 @router.get("/similarity", tags=["exploratory"])
 def similarity(reference: str, other: str, descriptor: str = "composition-rdf",
                max_frames: int = Query(1000, le=10000), adb: AtomDB = Depends(get_adb)):

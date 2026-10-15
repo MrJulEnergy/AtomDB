@@ -16,9 +16,11 @@ interface Props {
   yLabel: string;
   valueRange?: [number, number];
   onPick: (key: string) => void;
+  height?: number;
+  /** marker alpha (0..1); below 1 the surface ring is dropped so overlaps blend */
+  opacity?: number;
 }
 
-const H = 520;
 const PAD = { l: 48, r: 12, t: 10, b: 36 };
 
 function cssVar(name: string): string {
@@ -26,7 +28,8 @@ function cssVar(name: string): string {
 }
 
 /** Canvas scatter for thousands of points; nearest-point hover tooltip, click to open. */
-export default function Scatter({ points, xLabel, yLabel, valueRange, onPick }: Props) {
+export default function Scatter({ points, xLabel, yLabel, valueRange, onPick, height = 520, opacity = 1 }: Props) {
+  const H = height;
   const canvas = useRef<HTMLCanvasElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ p: Point; px: number; py: number } | null>(null);
@@ -78,6 +81,7 @@ export default function Scatter({ points, xLabel, yLabel, valueRange, onPick }: 
     const seq = ["--seq-100", "--seq-200", "--seq-300", "--seq-400", "--seq-500", "--seq-600"].map(cssVar);
     const surface = cssVar("--panel");
     const [v0, v1] = valueRange ?? [0, 1];
+    g.globalAlpha = opacity;
     for (const p of points) {
       let col: string;
       if (p.slot !== null) col = cssVar(`--series-${p.slot}`);
@@ -87,12 +91,15 @@ export default function Scatter({ points, xLabel, yLabel, valueRange, onPick }: 
       g.arc(sx(p.x), sy(p.y), 4, 0, 2 * Math.PI);
       g.fillStyle = col;
       g.fill();
-      g.lineWidth = 1.5; // surface ring separates overlapping marks
-      g.strokeStyle = surface;
-      g.stroke();
+      if (opacity >= 1) {
+        g.lineWidth = 1.5; // surface ring separates overlapping marks
+        g.strokeStyle = surface;
+        g.stroke();
+      }
     }
+    g.globalAlpha = 1;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, width, valueRange]);
+  }, [points, width, valueRange, H, opacity]);
 
   const nearest = (e: React.MouseEvent) => {
     const r = canvas.current!.getBoundingClientRect();
@@ -102,7 +109,7 @@ export default function Scatter({ points, xLabel, yLabel, valueRange, onPick }: 
     let bd = 12 * 12;
     for (const p of points) {
       const d = (sx(p.x) - mx) ** 2 + (sy(p.y) - my) ** 2;
-      if (d < bd) {
+      if (d <= bd) { // <=: the later-drawn (visible) point wins
         bd = d;
         best = p;
       }

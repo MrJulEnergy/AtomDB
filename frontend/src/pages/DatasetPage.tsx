@@ -3,12 +3,17 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Completeness, DatasetDetail, FrameRow, Page, PropertyDef, get } from "../api";
 import { ErrorBox, KV, Labels, Loading, NodeLink, Pager, Panel, ProvButtons } from "../components/common";
+import DatasetEditor from "../components/EditMetadata";
+import DsName from "../components/DsName";
 import ProvSummary from "../components/ProvSummary";
+import ShareCommand from "../components/ShareCommand";
 import { fmtBytes, fmtNum, fmtRange } from "../format";
+import TagChips from "../components/TagChips";
 
 export default function DatasetPage() {
   const { id } = useParams();
   const q = useQuery({ queryKey: ["dataset", id], queryFn: () => get<DatasetDetail>(`/datasets/${id}`) });
+  const [editing, setEditing] = useState(false);
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
   const d = q.data!;
@@ -16,12 +21,16 @@ export default function DatasetPage() {
     <section>
       <div className="page-head">
         <h1>
-          <span className="mono">{d.id}</span> {d.name}
+          <span className="mono">{d.id}</span> <DsName name={d.name} label={d.label} chips={d.chips} full />
           {d.status !== "active" && <span className="badge warn">{d.status}</span>}
         </h1>
-        <ProvButtons id={d.id} />
+        <div className="prov-buttons">
+          <button className={editing ? "primary" : ""} onClick={() => setEditing(!editing)}>{editing ? "done editing" : "✎ edit metadata"}</button>
+          <ProvButtons id={d.id} />
+        </div>
       </div>
       {d.description && <p>{d.description}</p>}
+      {editing && <DatasetEditor ds={d} />}
       <div className="panels">
         <Panel title="Summary">
           <KV
@@ -33,12 +42,15 @@ export default function DatasetPage() {
               ["Labels", <Labels e={d.has_energy} f={d.has_forces} s={d.has_stress} />],
               ["Energy range", d.energy_min !== null ? `${fmtRange(d.energy_min, d.energy_max, 4)} eV` : null],
               ["max |F|", d.fmax_max !== null ? `${fmtNum(d.fmax_max)} eV/Å` : null],
-              ["Tags", d.tags.join(", ")],
+              ["Tags", d.tags.length ? <TagChips names={d.tags} /> : null],
               ["Created", d.created_at.replace("T", " ").slice(0, 19)],
               ["Source", d.source_text],
             ]}
           />
-          <p><Link to={`/stats?ds=${d.id}`}>statistics &amp; histograms →</Link></p>
+          <p>
+            {(d.n_frames ?? 0) > 0 && <><Link to={`/datasets/${d.id}/frames/0`}>view structures in 3D →</Link> · </>}
+            <Link to={`/stats?ds=${d.id}`}>statistics &amp; histograms →</Link>
+          </p>
         </Panel>
         <Panel title="How was this made?" wide>
           <ProvSummary id={d.id} />
@@ -59,6 +71,7 @@ export default function DatasetPage() {
               ))}
             </div>
           ))}
+          <ShareCommand ids={[d.id]} />
         </Panel>
         {d.notes.length > 0 && (
           <Panel title="Notes">

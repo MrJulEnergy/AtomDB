@@ -10,16 +10,24 @@ them in one transaction:
 
 Many sbatch jobs writing one shared output file (laufband) are modelled as one
 calculation that ran on many jobs; which job produced which frame is not invented.
+
+An IPSuite project root (``zntrack.json`` + ``dvc.yaml`` + ``nodes/``) is split by
+``plan_project``: one calculation per ``ApplyCalculator`` node, with the data file
+loaded by its upstream ``AddData*`` stage as input, the project's submit script and the
+per-job ``model/<jobid>/`` directories as jobs.
 """
 
 from __future__ import annotations
 
 import fnmatch
+import re
+import tomllib
 from pathlib import Path
 
+import yaml
 from sqlalchemy import select
 
-from ..db.models import Calculation, DFTParams, HPCJob
+from ..db.models import Calculation, Dataset, DFTParams, HPCJob
 from ..errors import AtomDBError, InvalidInput
 from ..formats.registry import detect
 from ..frames import get_energy, get_forces
@@ -200,6 +208,171 @@ def plan_run(
     return plan
 
 
+# ----------------------------------------------------------------- IPSuite projects
+
+LOCK_PACKAGES = ("ipsuite", "zntrack", "laufband", "znh5md", "ase", "cp2k-input-tools")
+
+
+def is_ipsuite_project(run_dir: str | Path) -> bool:
+    root = Path(run_dir).expanduser()
+    return all((root / n).exists() for n in ("zntrack.json", "dvc.yaml", "nodes"))
+
+
+def plan_project(
+    run_dir: str | Path,
+    exclude: tuple[str, ...] = DEFAULT_EXCLUDE,
+    cluster: str | None = None,
+) -> list[dict]:
+    """One run plan per IPSuite ``ApplyCalculator`` node of the project at ``run_dir``."""
+    root = Path(run_dir).expanduser().resolve()
+    stages = (yaml.safe_load((root / "dvc.yaml").read_text()) or {}).get("stages", {})
+    params = {}
+    if (root / "params.yaml").is_file():
+        params = yaml.safe_load((root / "params.yaml").read_text()) or {}
+    produced = {}  # path → stage that writes it
+    for name, st in stages.items():
+        for key in ("outs", "metrics", "plots"):
+            for o in st.get(key, []) or []:
+                produced[o if isinstance(o, str) else next(iter(o))] = name
+
+    scripts = []
+    for p in sorted(root.glob("*.sh")):
+        head = _head(p)
+        if slurm.is_submit_script(p, head):
+            scripts.append((p, slurm.parse_script(p.read_text(errors="replace"))))
+    software = _lock_versions(root / "uv.lock")
+    project_files = [p for p in (root / n for n in (
+        "main.py", "dvc.yaml", "params.yaml", "zntrack.json", "pyproject.toml", "uv.lock",
+    )) if p.is_file()]
+    laufband_files = [p for p in root.iterdir() if p.is_file()
+                      and ("laufband" in p.name.lower() or "graphband" in p.name.lower())]
+
+    plans = []
+    for stage, st in stages.items():
+        outs = [o if isinstance(o, str) else next(iter(o)) for o in st.get("outs", []) or []]
+        model_out = next((o for o in outs if o.endswith("/model")), None)
+        frames_out = next((o for o in outs if o.endswith("/frames.h5")), None)
+        if "ApplyCalculator" not in st.get("cmd", "") or not model_out or not frames_out:
+            continue
+        node_dir = root / Path(model_out).parent
+        if not node_dir.is_dir():
+            continue
+        plan = plan_run(node_dir, exclude=exclude, max_depth=2, cluster=cluster)
+        plan["project"] = {"root": str(root), "stage": stage, "cmd": st.get("cmd"),
+                           "params": params.get(stage)}
+
+        # submit script: the one that runs this stage (else the only one)
+        sc = next(((p, s) for p, s in scripts if any(stage in c for c in s["commands"])), None)
+        if sc is None and len(scripts) == 1:
+            sc = scripts[0]
+        if sc is not None:
+            plan["submit_script"] = {"path": str(sc[0]), **sc[1]}
+            plan["laufband"] |= sc[1]["uses_laufband"]
+            plan["cluster"] = plan["cluster"] or sc[1].get("cluster")
+
+        # jobs: one model/<jobid>/ directory per Slurm job (LAUFBAND_IDENTIFIER)
+        out_pattern = (sc[1]["options"].get("output") if sc else None) or "slurm-%j.out"
+        err_pattern = sc[1]["options"].get("error") if sc else None
+        jobs = []
+        for jd in sorted((node_dir / "model").iterdir() if (node_dir / "model").is_dir()
+                         else []):
+            if not (jd.is_dir() and jd.name.isdigit()):
+                continue
+            job = {"job_id": jd.name, "array_task_id": None, "state": None, "file": None}
+            for role, pat in (("slurm_output", out_pattern), ("slurm_error", err_pattern)):
+                log = root / pat.replace("%j", jd.name) if pat else None
+                if log is None or not log.is_file():
+                    continue
+                state = slurm.job_state(_tail(log))
+                job["state"] = job["state"] or state
+                job["file"] = job["file"] or log.name
+                plan["logs"].append({"path": str(log), "role": role})
+            jobs.append(job)
+        plan["jobs"] = jobs
+        plan["warnings"] = [w for w in plan["warnings"] if not w.startswith("job ")]
+        by_state: dict[str, list[str]] = {}
+        for j in jobs:
+            if j["state"]:
+                by_state.setdefault(j["state"], []).append(j["job_id"])
+        for state, ids in by_state.items():
+            if len(ids) == 1:
+                plan["warnings"].append(f"job {ids[0]}: {state}")
+            else:  # laufband workers usually run into the time limit: one line, not one per job
+                plan["warnings"].append(f"{len(ids)} of {len(jobs)} jobs ended with {state}"
+                                        + (" (expected for laufband workers)"
+                                           if state == "TIMEOUT" and plan["laufband"] else ""))
+        if plan["laufband"] and len(jobs) > 1 and not any("attribution" in w for w in
+                                                          plan["warnings"]):
+            plan["warnings"].append(
+                f"{len(jobs)} jobs wrote shared outputs (laufband): recorded as one "
+                "calculation that ran on all jobs; frame↔job attribution is unknown")
+
+        # input structures: data file(s) loaded by the upstream AddData* stage
+        inputs_found = False
+        for dep in st.get("deps", []) or []:
+            up = produced.get(dep)
+            if up is None:
+                if (root / dep).is_file():
+                    plan["inputs"].append({"path": str(root / dep), "role": "cp2k_data",
+                                           "as": "file"})
+                continue
+            if "AddData" not in stages[up].get("cmd", ""):
+                plan["warnings"].append(
+                    f"input structures come from stage {up} (not a data file): pass --input")
+                continue
+            for d in stages[up].get("deps", []) or []:
+                if (root / d).is_file() and d not in produced:
+                    plan["inputs"].append({"path": str(root / d), "role": "structures",
+                                           "as": "dataset"})
+                    inputs_found = True
+        if not inputs_found:
+            plan["warnings"].append("no input structure file found for this node")
+        for prm in st.get("params", []) or []:
+            key = prm if isinstance(prm, str) else next(iter(prm))
+            if (root / key).is_file():
+                plan["inputs"].append({"path": str(root / key), "role": "cp2k_config",
+                                       "as": "file"})
+        plan["aux"] += [{"path": str(p), "role": "project"} for p in project_files]
+        plan["aux"] += [{"path": str(p), "role": "laufband_state"} for p in laufband_files]
+
+        calc = plan["calc"]
+        if calc.get("dft"):
+            calc["name"] = " ".join(x for x in (
+                stage.removesuffix("_ApplyCalculator"), "CP2K", calc["dft"].get("functional"),
+                calc["dft"].get("dispersion") if calc["dft"].get("dispersion") != "none"
+                else None) if x)
+        calc["software"] = {**calc["software"], **software}
+        for o in plan["outputs"]:
+            o["name_from_input"] = calc.get("name")
+        plans.append(plan)
+    if not plans:
+        raise InvalidInput(f"no ApplyCalculator node with outputs in {root}")
+    return plans
+
+
+def _tail(p: Path, n: int = 16384) -> str:
+    with open(p, "rb") as fh:
+        fh.seek(0, 2)
+        fh.seek(max(0, fh.tell() - n))
+        return fh.read().decode(errors="replace")
+
+
+def _lock_versions(lock: Path) -> dict:
+    if not lock.is_file():
+        return {}
+    try:
+        pkgs = tomllib.loads(lock.read_text()).get("package", [])
+    except tomllib.TOMLDecodeError:
+        return {}
+    out = {}
+    for pkg in pkgs:
+        if pkg.get("name") in LOCK_PACKAGES:
+            src = pkg.get("source", {})
+            rev = re.search(r"#([0-9a-f]{7,40})$", src.get("git", ""))
+            out[pkg["name"]] = pkg.get("version", "") + (f"+git{rev.group(1)[:10]}" if rev else "")
+    return out
+
+
 def execute_run(
     adb: AtomDB,
     plan: dict,
@@ -234,12 +407,26 @@ def execute_run(
                 in_ds.append(r.dataset.id)
                 created["datasets"]["inputs"].append(r.dataset.id)
         out_ds = []
+        parents = [s.get(Dataset, i) for i in in_ds]
+        parents = [p for p in parents if p is not None]
         for item in plan["outputs"]:
-            r = import_file(adb, item["path"], session=s,
-                            description=f"output of run {plan['run_dir']}")
+            ds_name = description = None
+            if item.get("name_from_input") and len(parents) == 1:
+                # generic IPSuite output name (frames.h5): name it after what was labelled
+                ds_name = f"{parents[0].name} | {item['name_from_input']}"
+                description = (f"{item['name_from_input']} relabelling of {parents[0].id} "
+                               f"({parents[0].name}); output of run {plan['run_dir']}")
+            r = import_file(adb, item["path"], session=s, name=ds_name,
+                            description=description or f"output of run {plan['run_dir']}",
+                            tags=sorted({t.name for p in parents for t in p.tags}) or None)
             if r.duplicate:
                 created["warnings"].append(f"{Path(item['path']).name} already imported as "
                                            f"{r.dataset.id}")
+            for p in parents:
+                if ctype == "dft" and r.dataset.n_frames < (p.n_frames or 0):
+                    created["warnings"].append(
+                        f"{r.dataset.id}: only {r.dataset.n_frames} of {p.n_frames} frames "
+                        f"of {p.id} labelled (run incomplete?)")
             out_ds.append(r.dataset.id)
             created["datasets"]["outputs"].append(r.dataset.id)
 
@@ -278,6 +465,7 @@ def execute_run(
             "run_dir": workdir, "qc": calc_spec.get("qc"), "run_software": calc_spec.get("software"),
             "laufband": plan["laufband"], "slurm": {k: v for k, v in sc.items()
                                                    if k not in ("path",)} or None,
+            **({"ipsuite": plan["project"]} if plan.get("project") else {}),
             **(extra or {}),
         }
         if calc_spec.get("params"):

@@ -47,6 +47,7 @@ class DatasetFileOut(_Out):
 class DatasetSummary(_Out):
     id: str
     name: str
+    label: str | None = None
     status: str
     created_at: datetime
     n_frames: int | None
@@ -62,6 +63,8 @@ class DatasetSummary(_Out):
     fmax_max: float | None = None
     tags: list[str] = []
     extra: dict[str, Any] = {}
+    #: compact auto-generated description (system, geometry, generator, labels, size)
+    chips: list[dict[str, str]] = []
 
 
 class DatasetDetail(DatasetSummary):

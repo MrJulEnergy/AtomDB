@@ -76,3 +76,123 @@ def test_soap_optional():
 
         with pytest.raises(InvalidInput, match="optional"):
             get_descriptor("soap")
+
+
+class _StubAtoms:
+    """Per-atom descriptor without torch: one-hot element + distance to the cell centre."""
+
+    name = "stub-atoms"
+    description = "test"
+    per_atom = True
+
+    def fit(self, elements):
+        self.elements = sorted(elements)
+
+    def compute_atoms(self, frames):
+        rows = []
+        for a in frames:
+            d = np.linalg.norm(a.positions - a.cell.sum(0) / 2, axis=1)
+            for sym, r in zip(a.get_chemical_symbols(), d, strict=True):
+                rows.append([float(sym == e) for e in self.elements] + [r])
+        return np.array(rows)
+
+
+@pytest.fixture
+def stub_atoms(monkeypatch):
+    from atomdb.descriptors import base
+
+    class Stub(_StubAtoms, base.AtomDescriptor):
+        pass
+
+    reg = {**base._registry(), "stub-atoms": Stub}
+    monkeypatch.setattr(base, "_registry", lambda: reg)
+    return "stub-atoms"
+
+
+def test_embed_atoms_stratified_and_filtered(adb, tmp_path, stub_atoms):
+    from atomdb.services.embedding import _stratified, embed_atoms
+
+    water_kcl = ["K", "Cl"] + ["O", "H", "H"] * 10
+    ase.io.write(tmp_path / "a.extxyz", _md_like(water_kcl, 20, 1))
+    ase.io.write(tmp_path / "b.extxyz", _md_like(["O", "H", "H"] * 8, 20, 2))
+    a, b = (import_file(adb, tmp_path / f"{n}.extxyz").dataset.id for n in ("a", "b"))
+    with adb.session() as s:
+        e = embed_atoms(adb, s, [a, b], stub_atoms, max_frames=10, max_atoms=40)
+        assert e["per_atom"] and {p["dataset"] for p in e["points"]} == {a, b}
+        ds_a = next(d for d in e["datasets"] if d["id"] == a)
+        # rare K/Cl keep all their atoms; the budget is shared between elements
+        assert ds_a["n_atoms"] == 40 and ds_a["elements"]["K"] == 10 and ds_a["elements"]["Cl"] == 10
+        o = embed_atoms(adb, s, [a, b], stub_atoms, max_frames=5, max_atoms=30, elements=["O"])
+        assert {p["element"] for p in o["points"]} == {"O"} and o["element_filter"] == ["O"]
+        with pytest.raises(Exception, match="per-atom"):
+            embed_atoms(adb, s, [a], "composition-rdf")
+    rng = np.random.default_rng(0)
+    pick = _stratified(np.array(["H"] * 90 + ["O"] * 9 + ["K"]), 21, rng)
+    assert len(pick) == 21 and 99 in pick
+
+
+def test_embed_atoms_skips_large(adb, tmp_path, stub_atoms, monkeypatch):
+    from atomdb.services import embedding
+
+    ase.io.write(tmp_path / "a.extxyz", _md_like(["O", "H", "H"] * 4, 12, 1))
+    ase.io.write(tmp_path / "big.extxyz", _md_like(["O", "H", "H"] * 4, 30, 2))
+    a, big = (import_file(adb, tmp_path / f"{n}.extxyz").dataset.id for n in ("a", "big"))
+    monkeypatch.setattr(embedding, "LARGE_FRAMES", 20)
+    with adb.session() as s:
+        e = embedding.embed_atoms(adb, s, [a, big], stub_atoms, max_atoms=10)
+        assert [d["id"] for d in e["datasets"]] == [a] and e["skipped"][0]["id"] == big
+        e = embedding.embed_atoms(adb, s, [a, big], stub_atoms, max_atoms=10, allow_large=True)
+        assert len(e["datasets"]) == 2 and not e["skipped"]
+
+
+@pytest.mark.skipif(not __import__("importlib").util.find_spec("mace"), reason="mace-torch not installed")
+def test_mace_descriptor_per_atom(data_dir):
+    frames = ase.io.read(data_dir / "kcl_labeled.extxyz", ":2")
+    d = get_descriptor("mace-mp0-small")
+    d.fit(["Cl", "H", "K", "O"])
+    x = d.compute_atoms(frames)
+    assert x.shape[0] == sum(len(a) for a in frames) and x.shape[1] > 0
+    assert d.compute(frames).shape == (2, x.shape[1])
+
+
+def test_descriptor_cache_reused_across_selections(adb, tmp_path, stub_atoms, monkeypatch):
+    from atomdb.descriptors.simple import CompositionRDF
+    from atomdb.services import embedding
+
+    kcl = ["K", "Cl"] + ["O", "H", "H"] * 4
+    ase.io.write(tmp_path / "a.extxyz", _md_like(kcl, 30, 1))
+    ase.io.write(tmp_path / "b.extxyz", _md_like(["O", "H", "H"] * 4, 20, 2))
+    ase.io.write(tmp_path / "c.extxyz", _md_like(["Na", "Cl"] + ["O", "H", "H"] * 4, 20, 3))
+    a, b, c = (import_file(adb, tmp_path / f"{n}.extxyz").dataset.id for n in "abc")
+    with adb.session() as s:
+        e1 = embedding.embed(adb, s, [a, b], max_frames=10)
+        assert e1["cache"] == {"frames_cached": 0, "frames_computed": 20}
+        # different selection (and element set): a and b come from the cache, only c is new
+        e2 = embedding.embed(adb, s, [a, c, b], max_frames=10)
+        assert e2["cache"] == {"frames_cached": 20, "frames_computed": 10}
+        # a dataset samples the same frames whatever else is selected
+        assert ([p["frame"] for p in e1["points"] if p["dataset"] == a]
+                == [p["frame"] for p in e2["points"] if p["dataset"] == a])
+        # cached vectors (computed with b's own elements) equal a direct computation
+        d = embedding.describe_frames(adb, s, [a, c, b], max_frames=10)
+        frames = ase.io.read(tmp_path / "b.extxyz", ":")
+        desc = CompositionRDF()
+        desc.fit(d["elements"])
+        rows = [k for k, m in enumerate(d["meta"]) if m["dataset"] == b]
+        np.testing.assert_allclose(
+            d["x"][rows], desc.compute([frames[d["meta"][k]["frame"]] for k in rows]), atol=1e-12)
+        # a larger sample keeps the smaller one: only the extra frames are computed
+        assert embedding.embed(adb, s, [a], max_frames=15)["cache"] == {
+            "frames_cached": 10, "frames_computed": 5}
+
+        x1 = embedding.embed_atoms(adb, s, [a, b], stub_atoms, max_frames=5, max_atoms=20)
+        assert x1["cache"]["frames_computed"] == 10
+        x2 = embedding.embed_atoms(adb, s, [a, b], stub_atoms, max_frames=5, max_atoms=20,
+                                   elements=["O"])
+        assert x2["cache"] == {"frames_cached": 10, "frames_computed": 0}
+
+    from atomdb.services import desccache
+
+    assert desccache.usage(adb)["caches"]["descriptors"]["files"] >= 5
+    desccache.clear(adb, ["descriptors"])
+    assert "descriptors" not in desccache.usage(adb)["caches"]

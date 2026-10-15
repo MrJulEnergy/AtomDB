@@ -135,3 +135,50 @@ def test_generations_do_not_leak(adb, data_dir, tmp_path):
     assert q(adb, "lineage:r2scan") == {lab, new}
     assert q(adb, f"from:{lab}") == {new}
     assert traj not in q(adb, "lineage:r2scan")
+
+
+def test_categories(db, adb, tmp_path):
+    from atomdb.services.datasets import add_tags, get_dataset
+    from atomdb.services.records import record_md
+    from atomdb.services.search import category_counts
+
+    adb, ids = db
+    ase.io.write(tmp_path / "ff.extxyz", ase.Atoms("NaCl", positions=[[0, 0, 0], [3.1, 0, 0]]))
+    ids["ff"] = import_file(adb, tmp_path / "ff.extxyz").dataset.id
+    with adb.session() as s:
+        add_tags(s, get_dataset(s, ids["lab"]), ["cluster"])
+        add_tags(s, get_dataset(s, ids["pbe"]), ["pbc"])
+        record_md(s, [ids["ff"]], md={"engine": "GROMACS", "temperature_k": 300})
+    assert q(adb, "type:dft") == {ids["lab"], ids["pbe"]}
+    assert q(adb, "type:mlip-md") == {ids["traj"], ids["sel"], ids["nacl"]}
+    assert q(adb, "type:classical-md") == {ids["ff"]}
+    # geometry comes from atoms.pbc: the labelled KCl boxes are periodic, the plain xyz
+    # trajectory and the cell-less dimers are not
+    assert q(adb, "geometry:cluster") == {ids["traj"], ids["sel"], ids["nacl"], ids["ff"]}
+    assert q(adb, "pbc:periodic") == {ids["lab"], ids["pbe"]}
+    assert q(adb, "dft_code:cp2k") == {ids["lab"]}
+    assert q(adb, "type:dft dft_code:vasp") == {ids["pbe"]}
+    with adb.session() as s:
+        c = category_counts(s)
+        assert {x["value"]: x["count"] for x in c["dft_code"]} == {"CP2K": 1, "VASP": 1}
+        assert {x["value"]: x["count"] for x in c["geometry"]} == {"pbc": 2, "no-pbc": 4}
+        # implicit solvent: only for DFT data; "none" unless recorded
+        assert {x["value"]: x["count"] for x in c["solvation"]} == {"none": 2}
+        assert {x["value"]: x["count"] for x in category_counts(s, "el:Na")["data_type"]} == {
+            "mlip-md": 1, "classical-md": 1}
+        item = search(s, f"id:{ids['lab']}")["items"][0]
+        # tags are labels, not facts: the "cluster" tag does not override the frames
+        assert item.extra["geometry"] == ["pbc"] and item.extra["data_type"] == ["dft"]
+    assert q(adb, "geometry:no-pbc") == q(adb, "geometry:cluster")  # old names still match
+    with adb.session() as s:
+        add_tags(s, get_dataset(s, ids["pbe"]), ["cpcm", "dft"])
+        add_tags(s, get_dataset(s, ids["nacl"]), ["dft"])
+    assert q(adb, "solvent:cpcm") == set()
+    assert ids["nacl"] not in q(adb, "type:dft")
+
+
+def test_vocab_code():
+    from atomdb import vocab
+
+    assert vocab.code("CP2k") == "CP2K" and vocab.code("orca") == "ORCA"
+    assert vocab.code("dftd4") is None

@@ -115,7 +115,7 @@ edge(id, src→node, dst→node, relation, role, created_at, import_id)
 frame_link(child_dataset, child_idx, parent_dataset, parent_idx, via_calc)  -- frame-level lineage
 
 ── Misc ──
-tag(id, name UNIQUE), node_tag(node_id, tag_id)
+tag(id, name UNIQUE, kind, description, alias_of), node_tag(node_id, tag_id)
 note(id, node_id, text, created_at)                  -- supplementary only, never provenance
 audit_log(id, ts, command, actor, action, node_id, payload_json)   -- append-only
 task(id, type, status, progress, params_json, result_json, created_at)  -- long jobs (stats, PCA)
@@ -199,9 +199,10 @@ atomdb info ID          atomdb ls [datasets|models|calcs|jobs|files] [--filter �
 atomdb search "functional:r2scan el:K,Cl T:400"   atomdb search --element K --element Cl [--any]
 atomdb provenance ID [--up|--down] [--depth N] [--frame IDX] [--format tree|json|dot]
 atomdb whatis PATH                            # identify unknown file
-atomdb convert IN OUT [--to h5md] [--allow-loss]   atomdb link ID [DEST]
+atomdb convert IN OUT [--to h5md] [--allow-loss]   atomdb link ID... [DEST] [--copy]
 atomdb stats ID [--recompute]                 atomdb compare ID ID… [--json]
-atomdb embed ID… [--descriptor simple|soap] [--max-frames N] --out pca.json
+atomdb embed ID… [--descriptor composition-rdf|soap] [--max-frames N] --out pca.json
+atomdb embed-atoms ID… [--element O] [--max-atoms N]      # per-atom MACE features
 atomdb annotate ID --set temperature=400 | --link driven_by MDL-…   # add provenance after the fact
 atomdb model add CHECKPOINT --family MACE --name MACE-MH-1 …   atomdb tag ID TAG
 atomdb validate [ID|--all]                    atomdb backup [--out …tar.zst]  atomdb restore ARCHIVE
@@ -302,7 +303,7 @@ dataset_folder/                      (git repo = code)
 │   ├── runparsers/ (base.py, slurm.py, cp2k.py, plumed.py, laufband.py)
 │   ├── services/ (importer.py, converter.py, provenance.py, search.py, stats.py, compare.py,
 │   │              whatis.py, validate.py, backup.py, tasks.py)
-│   ├── descriptors/ (base.py, simple.py, soap.py, pca.py)
+│   ├── descriptors/ (base.py, simple.py, soap.py, mace.py, pca.py)
 │   ├── schemas/ (pydantic models)
 │   ├── cli/ (main.py + command modules)
 │   ├── api/ (app.py, routers/*.py)
@@ -336,9 +337,45 @@ Data root (`$ATOMDB_HOME`, default `/work/jpeters/atomdb_store`) lives outside t
   `software_versions` snapshot (atomdb + git commit, Python, ASE, h5py, numpy, znh5md, …) and
   run-specific software (CP2K version/revision, `module load` lines) in `parameters`.
 - **Structures are one-frame datasets** (single code path for viewing, stats, search).
-- **Long jobs run synchronously** (stats are cached by file checksum; embeddings are
+- **Long jobs run synchronously** (stats are cached by file checksum; PCA projections are
   throwaway). The planned `task` table was not needed at current data sizes: 10k frames ×
   96 atoms import in ~2 s, full force statistics in ~0.5 s, single frame in ~8 ms.
+- **Removing data keeps a stub.** `atomdb remove` deletes frames, index rows and store bytes
+  but keeps the Dataset/File nodes (status `removed`, checksums and origins as attributes)
+  so lineage of derived datasets stays intact (MPtrj, 2.4 GB, was removed this way;
+  DS-054/055 still point to it).
+- **Structure categories come from the frames, not from tags.** `Dataset.structure` (JSON,
+  `services/structure.py`) is filled during import: pbc patterns, cell shapes and volume
+  range of periodic frames, which per-atom arrays have non-zero values (ASE writes all-zero
+  `initial_charges`), number of formulas. Geometry is derived from `atoms.pbc` (PBC / no PBC; partial/mixed only when present —
+  kept general on purpose, implicit solvent is a separate `solvation` category); a
+  molecular DFT code (ORCA, …) is only a fallback when no summary exists. Old
+  datasets are backfilled by `atomdb reindex` (box arrays read vectorised from the H5MD,
+  per-atom arrays on 20 sampled frames).
+- **Tags are labels, not facts.** Geometry, data type, code, functional, solvation … come
+  only from frames and provenance; tags never decide them (the old tag fallbacks were
+  removed after recording the few facts that only existed as tags). Tags have a kind
+  (`tag.kind`: system / project / quality / free) that drives chip colour and sidebar
+  groups, and aliases (`tag.alias_of`) so spelling variants resolve to one tag
+  (`services/tags.py`). `atomdb tags cleanup` removes tags that merely repeat facts.
+- **Short labels + chips instead of long names.** `node.label` is an optional short handle;
+  everything else that used to be packed into names (generator model, functional, code,
+  geometry, size) is rendered as chips computed on the fly from the facet index
+  (`services/labels.py`), so they stay correct when provenance is edited.
+- **Per-atom embeddings use MLIP node features** (MACE-MP-0 small, optional extra `mlip`).
+  They answer "do these datasets contain the same local environments?", which the
+  frame-averaged descriptors cannot. Atoms are subsampled per dataset with an equal budget
+  per element; categorical colour is limited to 3 series (the palette only validates for
+  3 all-pairs), beyond that the UI switches to small multiples.
+- **Descriptor vectors are cached, projections are not** (`services/desccache.py`). A PCA
+  depends on the whole selection and costs milliseconds; the descriptors (MACE on a GPU)
+  are the expensive part. One `.npz` per (descriptor + options + version, dataset, file
+  sha) holds per-frame rows, filled in incrementally. `Descriptor.element_layout` says how
+  columns depend on `fit(elements)`: `independent` (MACE: cached as is), `remap`
+  (composition-rdf: computed with the dataset's own elements and scattered into the
+  selection's columns by feature name) or `keyed` (default, e.g. SOAP: the element set is
+  part of the key). Frame samples are prefixes of a per-dataset seeded permutation, so
+  they don't depend on what else is selected and a larger `max_frames` contains a smaller one.
 - **Charts are a small dependency-free SVG/canvas layer** rather than Plotly (≈3.5 MB);
   graph: Cytoscape + dagre; 3D: 3Dmol.js.
 - **ZnTrack/DVC is not special-cased** (user decision); znh5md H5MD files are read as-is.

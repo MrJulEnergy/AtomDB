@@ -10,7 +10,7 @@ from ...services.completeness import completeness, suggest_relations
 from ...services.lineage import frame_lineage
 from ...services.nodes import describe
 from ...services.provenance import RELATIONS, provenance_graph
-from ...services.search import search, search_frames
+from ...services.search import category_counts, search, search_frames
 from ..deps import get_adb
 
 router = APIRouter()
@@ -84,6 +84,13 @@ def do_search(q: str = "", element: list[str] = Query(default=[]), any: bool = F
     with adb.session() as s:
         return search(s, q, elements=element, any_elements=any, offset=offset, limit=limit,
                       sort=sort)
+
+
+@router.get("/categories", tags=["search"])
+def categories(q: str = "", adb: AtomDB = Depends(get_adb)):
+    """Dataset counts per browse category (geometry, data type, DFT code, MLIP family) for `q`."""
+    with adb.session() as s:
+        return category_counts(s, q)
 
 
 @router.get("/frames", tags=["search"])

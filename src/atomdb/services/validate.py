@@ -54,6 +54,9 @@ def check_file(adb: AtomDB, f: File, rep: Report, quick: bool) -> bool:
 
 def check_dataset(adb: AtomDB, s: Session, ds: Dataset, rep: Report, quick: bool) -> None:
     rep.count("datasets")
+    if ds.status == "removed":  # data deleted on purpose (`atomdb remove`)
+        rep.count("removed_datasets")
+        return
     if not ds.name:
         rep.add("warning", "no_name", "dataset has no name", ds.id)
     for df in ds.files:
@@ -130,6 +133,8 @@ def validate(adb: AtomDB, ds_id: str | None = None, quick: bool = False,
             seen_files |= {df.file_id for df in ds.files}
         known_sha = set()
         for f in s.execute(select(File)).scalars():
+            if f.status == "removed":
+                continue
             known_sha.add(f.sha256)
             if f.id not in seen_files:
                 check_file(adb, f, rep, quick)

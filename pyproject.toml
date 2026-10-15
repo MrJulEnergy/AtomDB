@@ -22,6 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 md = ["MDAnalysis>=2.7"]
 descriptors = ["dscribe>=2.1"]
+mlip = ["mace-torch>=0.3.10"]
 
 [project.scripts]
 atomdb = "atomdb.cli.main:app"

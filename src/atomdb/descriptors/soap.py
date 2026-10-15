@@ -23,6 +23,9 @@ class SOAPAverage(Descriptor):
     def __init__(self, r_cut: float = 5.0, n_max: int = 6, l_max: int = 4, sigma: float = 0.5):
         self.params = {"r_cut": r_cut, "n_max": n_max, "l_max": l_max, "sigma": sigma}
 
+    def config(self) -> dict:
+        return self.params
+
     def fit(self, elements: list[str]) -> None:
         from dscribe.descriptors import SOAP
 

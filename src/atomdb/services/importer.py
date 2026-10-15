@@ -33,6 +33,7 @@ from .context import AtomDB
 from .datasets import add_tags, summary
 from .files import store_file
 from .provenance import add_edge
+from .structure import StructureSummary
 
 CHUNK = 256
 #: read options that name auxiliary input files; they are stored and linked as inputs
@@ -58,12 +59,14 @@ class _Indexer:
         self.fingerprints = hashlib.sha256()
         self.fp_list: list[str] = []
         self.energies: list[float | None] = []
+        self.structure = StructureSummary()
 
     def add_chunk(self, chunk) -> None:
         rows = []
         for atoms in chunk:
             r = frame_row(self.n, atoms)
             self.catalog.add(atoms)
+            self.structure.add(atoms)
             rows.append({"dataset_id": self.ds_id, **asdict(r)})
             self.n += 1
             self.n_atoms_total += r.n_atoms
@@ -104,6 +107,7 @@ class _Indexer:
         ds.has_stress = self.has_stress
         ds.energy_min, ds.energy_max, ds.fmax_max = self.e_min, self.e_max, self.fmax_max
         ds.content_fingerprint = self.fingerprints.hexdigest()[:32]
+        ds.structure = self.structure.to_json(len(self.formulas))
         for z in sorted(self.elem_frames):
             self.s.add(DatasetElement(
                 dataset_id=ds.id, z=z, symbol=chemical_symbols[z],

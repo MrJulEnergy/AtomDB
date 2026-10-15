@@ -178,7 +178,7 @@ def render_tree(graph: dict) -> str:
         n = nodes.get(nid, {"kind": "?", "name": "?", "subtitle": ""})
         st = "" if n.get("status") in (None, "active") else f" [{n['status']}]"
         sub = f"  — {n['subtitle']}" if n.get("subtitle") else ""
-        return f"{nid}  {n['name']}{st}{sub}"
+        return f"{nid}  {n.get('label') or n['name']}{st}{sub}"
 
     def walk(nid: str, prefix: str, label: str | None, last: bool) -> None:
         if label is None:
@@ -202,7 +202,7 @@ def render_tree(graph: dict) -> str:
 def render_dot(graph: dict) -> str:
     out = ["digraph provenance {", "  rankdir=BT; node [shape=box, fontname=monospace];"]
     for n in graph["nodes"]:
-        label = f"{n['id']}\\n{n['name']}\\n{n.get('subtitle', '')}".replace('"', "'")
+        label = f"{n['id']}\\n{n.get('label') or n['name']}\\n{n.get('subtitle', '')}".replace('"', "'")
         out.append(f'  "{n["id"]}" [label="{label}"];')
     for e in graph["edges"]:
         out.append(f'  "{e["src"]}" -> "{e["dst"]}" [label="{e["relation"]}"];')

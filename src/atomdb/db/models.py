@@ -74,6 +74,8 @@ class Node(Base):
     )
     kind: Mapped[str] = mapped_column(String(32), index=True)
     name: Mapped[str] = mapped_column(String(512), index=True)
+    #: short handle shown instead of the (often long) name in lists and plots
+    label: Mapped[str | None] = mapped_column(String(64))
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32), default="active")
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
@@ -104,6 +106,8 @@ class Dataset(Node):
     primary_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.node_id"))
     content_fingerprint: Mapped[str | None] = mapped_column(String(64), index=True)
     source_text: Mapped[str | None] = mapped_column(Text)
+    #: summary of the frames' pbc / cells / per-atom arrays (services/structure.py)
+    structure: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     primary_file: Mapped[File | None] = relationship(foreign_keys=[primary_file_id])
     files: Mapped[list[DatasetFile]] = relationship(
@@ -448,9 +452,15 @@ class PropertyDef(Base):
 
 
 class Tag(Base):
+    """A label. ``kind`` (system/project/quality/free) sets its chip colour and sidebar
+    group; an alias row (``alias_of``) redirects to the canonical tag (services/tags.py)."""
+
     __tablename__ = "tag"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), unique=True)
+    kind: Mapped[str] = mapped_column(String(16), default="free", server_default="free")
+    description: Mapped[str | None] = mapped_column(Text)
+    alias_of: Mapped[int | None] = mapped_column(ForeignKey("tag.id"))
 
 
 class NodeTag(Base):

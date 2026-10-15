@@ -26,6 +26,14 @@ DISPERSION = {
     "d4": "D4", "dftd4": "D4",
     "ts": "TS", "mbd": "MBD", "vv10": "VV10", "rvv10": "rVV10", "xdm": "XDM",
 }
+CODES = {
+    "cp2k": "CP2K", "orca": "ORCA", "vasp": "VASP", "qe": "Quantum ESPRESSO",
+    "quantumespresso": "Quantum ESPRESSO", "pw.x": "Quantum ESPRESSO", "gpaw": "GPAW",
+    "fhiaims": "FHI-aims", "aims": "FHI-aims", "psi4": "Psi4", "gaussian": "Gaussian",
+    "turbomole": "TURBOMOLE", "siesta": "SIESTA", "castep": "CASTEP", "abinit": "ABINIT",
+}
+# helper programs that add a correction to existing labels; not the electronic-structure code
+POSTHOC_CODES = {"dftd4", "dftd3", "sdftd3", "simpledftd3"}
 ENSEMBLES = {"nve": "NVE", "nvt": "NVT", "npt": "NPT", "nph": "NPH", "muvt": "μVT"}
 ES_METHODS = {
     "metad": "metadynamics", "metadynamics": "metadynamics", "wtmetad": "metadynamics",
@@ -52,6 +60,13 @@ def dispersion(value: str | None) -> str | None:
     if value is None:
         return None
     return DISPERSION.get(_key(value), value.strip())
+
+
+def code(value: str | None) -> str | None:
+    """Canonical electronic-structure code name; ``None`` for post-hoc correction tools."""
+    if value is None or _key(value) in POSTHOC_CODES:
+        return None
+    return CODES.get(_key(value), value.strip())
 
 
 def ensemble(value: str | None) -> str | None:

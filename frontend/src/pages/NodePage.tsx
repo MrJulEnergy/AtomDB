@@ -3,11 +3,13 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { NodeDesc, get } from "../api";
 import { ErrorBox, KV, Loading, NodeLink, Panel, ProvButtons } from "../components/common";
+import { CalcSettingsEditor, GeneralEditor } from "../components/EditMetadata";
 import { fmtBytes } from "../format";
+import DsName from "../components/DsName";
 
-const SKIP = new Set(["id", "kind", "name", "status", "subtitle", "description", "created_at", "updated_at", "tags", "attrs", "notes",
+const SKIP = new Set(["id", "kind", "name", "label", "status", "subtitle", "description", "created_at", "updated_at", "tags", "attrs", "notes",
   "md", "dft", "sampling", "training", "enhanced_sampling", "code_params", "parameters", "software_versions", "origins", "checkpoint",
-  "sbatch_options", "hyperparameters", "calc_type"]);
+  "sbatch_options", "hyperparameters", "calc_type", "model"]);
 
 function show(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -18,6 +20,7 @@ function show(v: unknown): string {
 export default function NodePage() {
   const { id } = useParams();
   const q = useQuery({ queryKey: ["node", id], queryFn: () => get<NodeDesc>(`/nodes/${id}`) });
+  const [editing, setEditing] = useState(false);
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
   const n = q.data!;
@@ -26,17 +29,32 @@ export default function NodePage() {
     <section>
       <div className="page-head">
         <h1>
-          <span className="mono">{n.id}</span> {n.name}
+          <span className="mono">{n.id}</span> <DsName name={n.name} label={n.label} chips={n.chips} full />
           {n.status !== "active" && <span className="badge warn">{n.status}</span>}
         </h1>
-        <ProvButtons id={n.id} />
+        <div className="prov-buttons">
+          <button className={editing ? "primary" : ""} onClick={() => setEditing(!editing)}>{editing ? "done editing" : "✎ edit"}</button>
+          <ProvButtons id={n.id} />
+        </div>
       </div>
       <p className="muted">{n.kind}{n.calc_type ? ` · ${n.calc_type}` : ""}{n.subtitle ? ` · ${n.subtitle}` : ""}</p>
       {n.description && <p>{n.description}</p>}
+      {editing && (
+        <div className="panels editor">
+          <Panel title="Edit: name, tags, metadata">
+            <GeneralEditor node={n as never} />
+          </Panel>
+          {(["dft", "md"] as const).filter((b) => n.calc_type === b).map((b) => (
+            <Panel key={b} title={b === "dft" ? "Edit DFT settings" : "Edit MD settings"} wide>
+              <CalcSettingsEditor calcId={n.id} section={b} values={n[b] ?? {}} model={n.model} />
+            </Panel>
+          ))}
+        </div>
+      )}
       <div className="panels">
         <Panel title="Details">
           <KV rows={[...basic.map(([k, v]) => [k, k === "size_bytes" ? fmtBytes(v as number) : show(v)] as [string, string]),
-            ["created", n.created_at?.slice(0, 19).replace("T", " ")], ["tags", (n.tags ?? []).join(", ")]]} />
+            ["created", n.created_at?.slice(0, 19).replace("T", " ")], ["model", n.model ? String(n.model) : null], ["tags", (n.tags ?? []).join(", ")]]} />
         </Panel>
         {(["dft", "md", "sampling", "training"] as const).map((b) =>
           n[b] ? (

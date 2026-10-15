@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db.models import Dataset, Frame
-from ..errors import IntegrityProblem, NotFound
+from ..errors import IntegrityProblem, InvalidInput, NotFound
 from ..formats.h5md import H5MDFrameSource
 from ..frames import calc_results, get_temperature
 from .context import AtomDB
@@ -23,6 +23,8 @@ def _source(path: str, mtime: float) -> H5MDFrameSource:
 
 
 def open_dataset(adb: AtomDB, ds: Dataset) -> H5MDFrameSource:
+    if ds.status == "removed":
+        raise InvalidInput(f"{ds.id} was removed (data deleted; only its record is kept)")
     if ds.primary_file is None:
         raise IntegrityProblem(f"{ds.id} has no canonical file")
     p = adb.store.abspath(ds.primary_file.store_relpath)

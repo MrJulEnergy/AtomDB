@@ -48,17 +48,28 @@ def file_out(adb: AtomDB, f) -> FileOut:
     )
 
 
+def display_name(node: Node) -> str:
+    return node.label or node.name
+
+
 def summary(s: Session, ds: Dataset, extra: dict | None = None) -> DatasetSummary:
+    from .labels import chips
+    from .search import facets_for
+
+    if extra is None:
+        extra = facets_for(s, [ds.id])[ds.id]
+    elements = elements_of(s, ds)
     return DatasetSummary(
         id=ds.id,
         name=ds.name,
+        label=ds.label,
         status=ds.status,
         created_at=ds.created_at,
         n_frames=ds.n_frames,
         n_atoms_min=ds.n_atoms_min,
         n_atoms_max=ds.n_atoms_max,
         formula_summary=ds.formula_summary,
-        elements=elements_of(s, ds),
+        elements=elements,
         has_energy=ds.has_energy,
         has_forces=ds.has_forces,
         has_stress=ds.has_stress,
@@ -66,7 +77,8 @@ def summary(s: Session, ds: Dataset, extra: dict | None = None) -> DatasetSummar
         energy_max=ds.energy_max,
         fmax_max=ds.fmax_max,
         tags=sorted(t.name for t in ds.tags),
-        extra=extra or {},
+        extra=extra,
+        chips=chips(ds, extra, elements),
     )
 
 
@@ -96,13 +108,12 @@ def list_datasets(
 
 
 def add_tags(s: Session, node: Node, names: list[str]) -> None:
+    """Tag ``node``; names resolve case-insensitively and through aliases (Water → water)."""
+    from .tags import get_or_create
+
     for name in names:
-        name = name.strip()
-        if not name or any(t.name == name for t in node.tags):
+        if not name.strip():
             continue
-        tag = s.execute(select(Tag).where(Tag.name == name)).scalar_one_or_none()
-        if tag is None:
-            tag = Tag(name=name)
-            s.add(tag)
-            s.flush()
-        node.tags.append(tag)
+        tag = get_or_create(s, name)
+        if not any(t.id == tag.id for t in node.tags):
+            node.tags.append(tag)

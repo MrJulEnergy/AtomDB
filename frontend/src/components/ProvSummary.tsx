@@ -20,7 +20,7 @@ export default function ProvSummary({ id }: { id: string }) {
   if (q.error) return <ErrorBox error={q.error} />;
   const nodes = q.data!.nodes.filter((n) => n.id !== id);
   const groups = GROUPS.map(([title, pred]) => [title, nodes.filter(pred)] as const).filter(([, ns]) => ns.length);
-  if (!groups.length) return <p className="muted">No provenance beyond the import. Use <code>atomdb annotate</code> or <code>atomdb record</code>.</p>;
+  if (!groups.length) return <p className="muted">No provenance beyond the import. Use <b>✎ edit metadata</b> above (or <code>atomdb annotate</code>).</p>;
   return (
     <div className="prov-summary">
       {groups.map(([title, ns]) => (
@@ -29,7 +29,7 @@ export default function ProvSummary({ id }: { id: string }) {
           <ul>
             {ns.slice(0, 12).map((n) => (
               <li key={n.id}>
-                <NodeLink id={n.id} /> {n.name}
+                <NodeLink id={n.id} /> <span title={n.label ? n.name : undefined}>{n.label || n.name}</span>
                 {n.status !== "active" && <span className="badge warn">{n.status}</span>}
                 {n.subtitle && <span className="muted"> — {n.subtitle}</span>}
               </li>

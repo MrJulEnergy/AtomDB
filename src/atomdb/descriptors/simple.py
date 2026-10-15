@@ -16,10 +16,15 @@ class CompositionRDF(Descriptor):
     name = "composition-rdf"
     description = ("element fractions + per element-pair radial distribution histograms "
                    "(PBC-aware, normalised per atom); fast, no extra dependencies")
+    element_layout = "remap"
 
     def __init__(self, cutoff: float = 6.0, bins: int = 22, r_min: float = 0.5):
         self.cutoff = cutoff
+        self.options = {"cutoff": cutoff, "bins": bins, "r_min": r_min}
         self.edges = np.linspace(r_min, cutoff, bins + 1)
+
+    def config(self) -> dict:
+        return self.options
 
     def fit(self, elements: list[str]) -> None:
         super().fit(elements)

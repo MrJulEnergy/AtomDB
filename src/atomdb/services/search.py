@@ -15,6 +15,15 @@ Keyed terms and free text refer to a dataset's own generation: an MD trajectory 
 by a model trained on r2SCAN data does not match ``functional:r2scan`` (it matches
 ``lineage:r2scan``).
     frames>100  atoms<500  has:forces  has:stress  tag:production  name:kcl
+    geometry:cluster  type:dft  dft_code:orca  mlip_family:MACE   browse categories;
+                                  type: dft|mlip-md|classical-md|other, "a,b" = either
+    pbc:pbc|no-pbc|partial-pbc|mixed   (from atoms.pbc; alias of geometry;
+                                  periodic/cluster/vacuum/slab are accepted synonyms)
+    solvation:CPCM|none           implicit solvent of the labelling calculation
+    system:water  project:kcl_explore  quality:unreliable   tags by kind (atomdb tags)
+    cell:fixed|variable  cell_shape:cubic|orthorhombic|triclinic
+    labels:stress  atom_data:velocities  composition:fixed|variable
+    n_elements:binary  size:small|medium|large   (more categories from the frames)
     cluster:hawk  ensemble:NVT  sampling:uncertainty  status:placeholder
     <anything>:<value>            dataset metadata set with --set / annotate
 
@@ -35,6 +44,7 @@ from ..db.models import Dataset, DatasetElement, DatasetFacet, Frame, NodeTag, T
 from ..errors import InvalidInput
 from ..frames import mask_for_symbols
 from ..ids import normalize_id
+from .facets import CATEGORY_KEYS, GEOMETRY_SYNONYMS
 
 TERM = re.compile(r"^(?P<key>[A-Za-z_][\w.:\-]*?)(?P<op>>=|<=|!=|:|=|>|<)(?P<val>.+)$")
 TEMP_TEXT = re.compile(r"^(?P<num>\d+(?:\.\d+)?)\s*K$", re.IGNORECASE)
@@ -50,9 +60,16 @@ ALIASES = {
     "cluster": "cluster", "partition": "partition", "job": "job_id", "from": "ancestor",
     "derived": "ancestor", "ancestor": "ancestor", "tag": "tag", "el": "elements",
     "element": "elements", "elements": "elements", "contains": "elements", "only": "only",
-    "frames": "frames", "atoms": "atoms", "has": "has", "name": "name", "id": "id",
+    "frames": "frames", "atoms": "atoms", "has": "has", "name": "name", "label": "label",
+    "id": "id",
     "status": "status", "engine": "md_engine", "thermostat": "thermostat",
     "cutoff": "cutoff", "calc": "calc_type", "version": "code_version", "lineage": "lineage",
+    "geometry": "geometry", "geom": "geometry", "type": "data_type", "data_type": "data_type",
+    "dft_code": "dft_code", "mlip_family": "mlip_family", "pbc": "geometry",
+    "cell": "cell", "cell_shape": "cell_shape", "labels": "labels", "atom_data": "atom_data",
+    "composition": "composition", "n_elements": "n_elements", "nel": "n_elements",
+    "size": "size", "solvation": "solvation", "solvent": "solvation",
+    "system": "system", "project": "project", "quality": "quality",
 }
 NUMERIC_FACETS = {"temperature", "pressure", "cutoff"}
 CONTAINS_FACETS = {"basis", "pseudopotential", "code_version"}
@@ -194,8 +211,9 @@ def _term_condition(key: str, op: str, val: str):
         if val.lower() not in cols:
             raise InvalidInput("has: expects energy, forces or stress")
         return cols[val.lower()].is_(True)
-    if key == "name":
-        return func.lower(Dataset.name).contains(val.lower())
+    if key in ("name", "label"):
+        return or_(func.lower(Dataset.name).contains(val.lower()),
+                   func.lower(func.coalesce(Dataset.label, "")).contains(val.lower()))
     if key == "id":
         return Dataset.id.startswith(normalize_id(val) if val.count("-") == 2 else val.upper())
     if key == "status":
@@ -228,6 +246,11 @@ def _term_condition(key: str, op: str, val: str):
         else:
             cond = _facet("enhanced_sampling", func.lower(DatasetFacet.value) ==
                           (vocab.es_method(val) or val).lower())
+    elif key in CATEGORY_KEYS:
+        vals = [v.strip().lower() for v in val.split(",") if v.strip()]
+        if key == "geometry":
+            vals = [GEOMETRY_SYNONYMS.get(v, v) for v in vals]
+        cond = _facet(key, func.lower(DatasetFacet.value).in_(vals))
     elif key in CONTAINS_FACETS:
         cond = _facet(key, func.lower(DatasetFacet.value).contains(val.lower()))
     elif key.startswith("attr."):
@@ -250,6 +273,7 @@ def build(query: Query) -> Select:
         like = t.lower()
         conds.append(or_(
             func.lower(Dataset.name).contains(like),
+            func.lower(func.coalesce(Dataset.label, "")).contains(like),
             func.lower(func.coalesce(Dataset.description, "")).contains(like),
             Dataset.id.in_(select(DatasetFacet.dataset_id).where(
                 ~DatasetFacet.key.startswith("lineage:"), DatasetFacet.key != "ancestor",
@@ -271,6 +295,8 @@ def build(query: Query) -> Select:
         conds.append(~exists(select(DatasetElement.dataset_id).where(
             DatasetElement.dataset_id == Dataset.id,
             DatasetElement.symbol.notin_(query.elements_only))))
+    if not any(k == "status" for k, _, _ in query.terms):
+        conds.append(Dataset.status != "removed")  # data deleted, stub kept (`atomdb remove`)
     if conds:
         stmt = stmt.where(and_(*conds))
     return stmt
@@ -279,7 +305,8 @@ def build(query: Query) -> Select:
 def facets_for(s: Session, ds_ids: list[str]) -> dict[str, dict[str, list[str]]]:
     out: dict[str, dict[str, list[str]]] = {i: {} for i in ds_ids}
     keys = ("functional", "dispersion", "code", "model", "temperature", "pressure", "ensemble",
-            "enhanced_sampling", "cluster", "source_dataset", "basis")
+            "enhanced_sampling", "cluster", "source_dataset", "basis", "md_engine",
+            *CATEGORY_KEYS)
     for ds_id, key, value in s.execute(
         select(DatasetFacet.dataset_id, DatasetFacet.key, DatasetFacet.value)
         .where(DatasetFacet.dataset_id.in_(ds_ids), DatasetFacet.key.in_(keys))
@@ -305,6 +332,20 @@ def search(s: Session, q: str, elements: list[str] | None = None, any_elements: 
     items = [summary(s, s.get(Dataset, i), extra=facets[i]) for i in ids]
     return {"query": q, "interpreted": query.describe(), "total": total, "offset": offset,
             "limit": limit, "items": items}
+
+
+def category_counts(s: Session, q: str = "") -> dict[str, list[dict]]:
+    """Datasets per browse-category value among those matching ``q``."""
+    ids = build(parse(q)).subquery()
+    out: dict[str, list[dict]] = {k: [] for k in CATEGORY_KEYS}
+    for key, value, n in s.execute(
+        select(DatasetFacet.key, DatasetFacet.value, func.count(func.distinct(DatasetFacet.dataset_id)))
+        .where(DatasetFacet.key.in_(CATEGORY_KEYS), DatasetFacet.dataset_id.in_(select(ids.c.id)))
+        .group_by(DatasetFacet.key, DatasetFacet.value)
+        .order_by(DatasetFacet.key, func.count(func.distinct(DatasetFacet.dataset_id)).desc())
+    ):
+        out[key].append({"value": value, "count": n})
+    return out
 
 
 def search_frames(

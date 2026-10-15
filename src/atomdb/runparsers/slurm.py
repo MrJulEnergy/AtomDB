@@ -95,10 +95,13 @@ def parse_job_output(name: str, text: str) -> dict | None:
     m = OUT_RE.match(name)
     if not m:
         return None
-    state = None  # unknown: Slurm writes no success marker
+    return {"job_id": m.group(1), "array_task_id": m.group(2), "state": job_state(text),
+            "file": name}
+
+
+def job_state(text: str) -> str | None:
+    """Failure state found in a job log; None = unknown (Slurm writes no success marker)."""
     for marker, st in FAILURE_MARKERS.items():
         if marker in text:
-            state = st
-            break
-    return {"job_id": m.group(1), "array_task_id": m.group(2), "state": state,
-            "file": name}
+            return st
+    return None

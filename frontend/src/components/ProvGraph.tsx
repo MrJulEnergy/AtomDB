@@ -3,6 +3,8 @@ import dagre from "cytoscape-dagre";
 import { useEffect, useRef } from "react";
 import { Graph } from "../api";
 
+const shortName = (s: string) => (s.length > 34 ? s.slice(0, 32) + "…" : s);
+
 cytoscape.use(dagre);
 
 const KIND_COLORS: Record<string, string> = {
@@ -48,7 +50,7 @@ export default function ProvGraph({ graph, hideFiles, selected, onSelect, onRero
       ...graph.nodes.filter((n) => !hidden.has(n.id)).map((n) => ({
         data: {
           id: n.id,
-          label: `${n.id}\n${n.name.length > 34 ? n.name.slice(0, 32) + "…" : n.name}${n.subtitle ? "\n" + (n.subtitle.length > 40 ? n.subtitle.slice(0, 38) + "…" : n.subtitle) : ""}`,
+          label: `${n.id}\n${shortName(n.label || n.name)}${n.subtitle ? "\n" + (n.subtitle.length > 40 ? n.subtitle.slice(0, 38) + "…" : n.subtitle) : ""}`,
           color: colorOf(n),
           root: n.id === graph.root ? 1 : 0,
           placeholder: n.status === "placeholder" ? 1 : 0,

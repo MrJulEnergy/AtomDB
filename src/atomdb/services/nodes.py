@@ -62,7 +62,8 @@ def subtitle(s: Session, node: Node) -> str:
 
 def describe(adb: AtomDB, s: Session, node: Node, full: bool = True) -> dict[str, Any]:
     d: dict[str, Any] = {
-        "id": node.id, "kind": node.kind, "name": node.name, "status": node.status,
+        "id": node.id, "kind": node.kind, "name": node.name, "label": node.label,
+        "status": node.status,
         "subtitle": subtitle(s, node),
     }
     if isinstance(node, Calculation):
@@ -86,6 +87,11 @@ def describe(adb: AtomDB, s: Session, node: Node, full: bool = True) -> dict[str
             "enhanced_sampling": [_row(e) for e in node.enhanced_sampling],
             "code_params": {p.key: p.value for p in node.params},
         })
+        if node.md is not None:
+            from .edit import _edges
+
+            d["model"] = next((s.get(Node, e.dst).name for e in
+                               _edges(s, src=node.id, relation="driven_by")), None)
     elif isinstance(node, Model):
         d.update(_row(node, skip=("node_id",)))
         if node.checkpoint_file_id:

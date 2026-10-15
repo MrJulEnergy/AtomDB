@@ -18,9 +18,17 @@ export interface FileOut {
   origins: FileOrigin[];
 }
 
+export interface Chip {
+  kind: "system" | "project" | "geometry" | "generator" | "labels" | "size" | "warn";
+  text: string;
+  title: string;
+}
+
 export interface DatasetSummary {
   id: string;
   name: string;
+  label: string | null;
+  chips: Chip[];
   status: string;
   created_at: string;
   n_frames: number | null;
@@ -55,6 +63,12 @@ export interface SearchResult {
   items: DatasetSummary[];
 }
 
+export type CategoryKey =
+  | "system" | "project" | "quality"
+  | "geometry" | "cell_shape" | "cell" | "solvation" | "data_type" | "dft_code" | "mlip_family"
+  | "labels" | "atom_data" | "composition" | "n_elements" | "size";
+export type CategoryCounts = Record<CategoryKey, { value: string; count: number }[]>;
+
 export interface Page<T> {
   total: number;
   offset: number;
@@ -66,6 +80,7 @@ export interface NodeBrief {
   id: string;
   kind: string;
   name: string;
+  label?: string | null;
   status: string;
   subtitle: string;
   calc_type?: string;
@@ -162,9 +177,41 @@ export interface ElementCount {
   atoms: number;
 }
 
+export interface CalcSettings {
+  calc_id: string;
+  name: string;
+  values: Record<string, unknown>;
+  inputs: string[];
+  shared_with: string[];
+  model?: string | null;
+}
+
+export interface DatasetSettings {
+  dataset: string;
+  fields: { dft: string[]; md: string[] };
+  dft: CalcSettings[];
+  md: CalcSettings[];
+}
+
+export interface CopyResult {
+  source: string;
+  parts: string[];
+  results: { dataset: string; dft?: string; md?: string; attrs?: string[]; tags?: string[]; also_affects?: string[] }[];
+}
+
 export class ApiError extends Error {
   constructor(public code: string, message: string) {
     super(message);
+  }
+}
+
+/** JSON body; a non-JSON reply (proxy error page, plain-text 500) becomes an ApiError. */
+async function readBody(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    throw new ApiError(`http_${res.status}`, `${res.status} ${res.statusText}: ${text.slice(0, 200)}`);
   }
 }
 
@@ -178,23 +225,31 @@ export async function get<T>(path: string, params?: Params): Promise<T> {
     else qs.set(k, String(v));
   }
   const res = await fetch(`/api/v1${path}${qs.toString() ? `?${qs}` : ""}`);
-  const body = await res.json();
+  const body = await readBody(res);
   if (!res.ok) throw new ApiError(body?.error?.code ?? "error", body?.error?.message ?? res.statusText);
   return body as T;
 }
 
 export async function post<T>(path: string, body?: unknown, params?: Params): Promise<T> {
+  return send<T>("POST", path, body, params);
+}
+
+export async function send<T>(method: "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown, params?: Params): Promise<T> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params ?? {})) if (v !== undefined && v !== "") qs.set(k, String(v));
   const res = await fetch(`/api/v1${path}${qs.toString() ? `?${qs}` : ""}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = await res.json();
-  if (!res.ok) throw new ApiError(data?.error?.code ?? "error", data?.error?.message ?? res.statusText);
+  const data = await readBody(res);
+  if (!res.ok) throw new ApiError(data?.error?.code ?? "error", data?.error?.message ?? data?.detail?.[0]?.msg ?? res.statusText);
   return data as T;
 }
+
+export type TagKind = "system" | "project" | "quality" | "free";
+export interface TagInfo { name: string; kind: TagKind; description: string | null; aliases: string[]; count: number }
+export interface TagList { kinds: TagKind[]; tags: TagInfo[] }
 
 export function nodeHref(id: string): string {
   return id.startsWith("DS-") ? `/datasets/${id}` : `/nodes/${id}`;

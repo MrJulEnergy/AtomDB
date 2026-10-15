@@ -49,16 +49,23 @@ class RunRequest(BaseModel):
 
 @router.post("/import-run")
 def do_import_run(req: RunRequest, adb: AtomDB = Depends(get_adb)):
-    """Plan (default) or execute (`execute: true`) the import of a calculation directory."""
-    from ...services.runimport import execute_run, plan_run
+    """Plan (default) or execute (`execute: true`) the import of a calculation directory.
 
-    plan = plan_run(req.path, cluster=req.cluster)
-    out: dict = {"plan": plan}
-    if req.execute:
-        out["result"] = execute_run(adb, plan, input_datasets=req.inputs,
-                                    sampled_from=req.sampled_from, model=req.model,
-                                    calc_type=req.calc_type)
-    return out
+    An IPSuite project root returns `{runs: [{plan, result?}, ...]}` (one per node).
+    """
+    from ...services.runimport import execute_run, is_ipsuite_project, plan_project, plan_run
+
+    def run(plan: dict) -> dict:
+        out: dict = {"plan": plan}
+        if req.execute:
+            out["result"] = execute_run(adb, plan, input_datasets=req.inputs,
+                                        sampled_from=req.sampled_from, model=req.model,
+                                        calc_type=req.calc_type)
+        return out
+
+    if is_ipsuite_project(req.path):
+        return {"runs": [run(p) for p in plan_project(req.path, cluster=req.cluster)]}
+    return run(plan_run(req.path, cluster=req.cluster))
 
 
 class ConvertRequest(BaseModel):

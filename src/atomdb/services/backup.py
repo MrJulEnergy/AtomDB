@@ -43,7 +43,8 @@ def backup(adb: AtomDB, out: Path | None = None, level: int = 10) -> dict:
         raise InvalidInput(f"backup file exists: {out}")
     out.parent.mkdir(parents=True, exist_ok=True)
     with adb.session() as s:
-        files = [(f.store_relpath, f.sha256, f.size_bytes) for f in s.execute(select(File)).scalars()]
+        files = [(f.store_relpath, f.sha256, f.size_bytes) for f in s.execute(
+            select(File).where(File.status != "removed")).scalars()]
         counts = {
             "nodes": s.execute(select(func.count()).select_from(Node)).scalar_one(),
             "datasets": s.execute(select(func.count()).select_from(Dataset)).scalar_one(),

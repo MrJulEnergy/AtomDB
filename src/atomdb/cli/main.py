@@ -26,10 +26,11 @@ JsonOpt = Annotated[bool, typer.Option("--json", help="Machine-readable JSON out
 
 
 def _register_subapps() -> None:
-    from . import model, record
+    from . import model, record, tags
 
     app.add_typer(record.app, name="record")
     app.add_typer(model.app, name="model")
+    app.add_typer(tags.app, name="tags")
 
 
 @app.callback()
@@ -85,6 +86,8 @@ def init(json_: JsonOpt = False):
 def import_(
     paths: Annotated[list[Path], typer.Argument(help="Files to import (copied, never moved).")],
     name: Annotated[str | None, typer.Option(help="Dataset name (default: file stem).")] = None,
+    label: Annotated[str | None, typer.Option(
+        help="Short display name shown in lists and plots (single file only).")] = None,
     description: Annotated[str | None, typer.Option("--description", "-d")] = None,
     tag: Annotated[list[str], typer.Option("--tag", "-t", help="Tag (repeatable).")] = [],
     fmt: Annotated[str | None, typer.Option("--format", "-f", help="Force a file format.")] = None,
@@ -160,6 +163,10 @@ def import_(
                 adb, p, name=name if len(paths) == 1 else None, description=description,
                 tags=tag, fmt=fmt, read_options=read_options, session=s,
             )
+            if label and len(paths) == 1 and not r.duplicate:
+                from ..services.edit import edit_node
+
+                edit_node(s, r.dataset.id, label=label)
             if r.duplicate and (meta or note):
                 r.warnings.append("duplicate: provenance flags not applied to the existing "
                                   "dataset (use `atomdb annotate`)")
@@ -232,27 +239,38 @@ def import_run(
 ):
     """Import HPC calculation directories (Slurm, CP2K, PLUMED) with full provenance.
 
+    An IPSuite project root is split into one calculation per ApplyCalculator node.
     Without --yes only the proposed records are shown (nothing is written).
     """
-    from ..services.runimport import DEFAULT_EXCLUDE, execute_run, plan_run
+    from ..services.runimport import (
+        DEFAULT_EXCLUDE,
+        execute_run,
+        is_ipsuite_project,
+        plan_project,
+        plan_run,
+    )
 
     _json(json_)
     adb = open_db() if yes else None
     out = []
+    excl = DEFAULT_EXCLUDE + tuple(exclude)
     for d in run_dirs:
-        plan = plan_run(d, exclude=DEFAULT_EXCLUDE + tuple(exclude), cluster=cluster)
-        entry: dict = {"plan": plan}
-        if yes:
-            entry["result"] = execute_run(adb, plan, input_datasets=input,
-                                          sampled_from=sampled_from, model=model, name=name,
-                                          calc_type=calc_type)
-        out.append(entry)
+        plans = (plan_project(d, exclude=excl, cluster=cluster) if is_ipsuite_project(d)
+                 else [plan_run(d, exclude=excl, cluster=cluster)])
+        for plan in plans:
+            entry: dict = {"plan": plan}
+            if yes:
+                entry["result"] = execute_run(adb, plan, input_datasets=input,
+                                              sampled_from=sampled_from, model=model,
+                                              name=name, calc_type=calc_type)
+            out.append(entry)
 
     def human(entries):
         for e in entries:
             p = e["plan"]
             c = p["calc"]
-            print(f"run {p['run_dir']}")
+            print(f"run {p['run_dir']}"
+                  + (f"  [ipsuite stage {p['project']['stage']}]" if p.get("project") else ""))
             print(f"  calculation: {calc_type or c['type']}  {c.get('name') or ''}")
             for block in ("dft", "md"):
                 if c.get(block):
@@ -332,30 +350,65 @@ def whatis(
 @app.command()
 @handle_errors
 def link(
-    node_id: str,
-    dest: Annotated[Path, typer.Argument(help="Target path or directory.")] = Path("."),
+    args: Annotated[list[str], typer.Argument(
+        metavar="ID... [DEST]",
+        help="Dataset/file IDs, optionally followed by a target path or directory (default: .).")],
     original: Annotated[bool, typer.Option(help="Link the original file instead of H5MD.")] = False,
+    copy: Annotated[bool, typer.Option("--copy", help="Write an independent, writable copy instead of a symlink.")] = False,
     json_: JsonOpt = False,
 ):
-    """Create a read-only symlink to a dataset's file in the store."""
-    from ..store.links import make_link
+    """Create read-only symlinks (or copies with --copy) of datasets' files in the store.
+
+    With several IDs, DEST is a directory (created if needed); files that would share a
+    name are prefixed with their ID.
+    """
+    from ..ids import is_id
+    from ..store.links import make_copy, make_link
 
     _json(json_)
+    if len(args) > 1 and not is_id(args[-1].upper()):
+        ids, dest = args[:-1], Path(args[-1])
+    else:
+        ids, dest = args, Path(".")
+    if len(ids) > 1:
+        dest.expanduser().mkdir(parents=True, exist_ok=True)
     adb = open_db()
     with adb.session() as s:
-        node = dsvc.get_node(s, node_id)
-        if isinstance(node, File):
-            f = node
-        elif isinstance(node, Dataset):
-            role = "original" if original else "canonical_h5md"
-            f = next(df.file for df in node.files if df.role == role)
-        else:
-            raise InvalidInput(f"{node.id} is a {node.kind}; link a dataset or file")
-        p = make_link(s, adb.store.abspath(f.store_relpath), f, dest, node.id)
-        adb.audit(s, "link.create", node.id, path=str(p))
-        data = {"link": str(p.absolute()), "target": str(adb.store.abspath(f.store_relpath)),
-                "file_id": f.id}
-    emit(data, lambda d: print(f"{d['link']} -> {d['target']}"))
+        picked = []
+        for node_id in ids:
+            node = dsvc.get_node(s, node_id)
+            if isinstance(node, File):
+                f = node
+            elif isinstance(node, Dataset):
+                role = "original" if original else "canonical_h5md"
+                f = next((df.file for df in node.files if df.role == role), None)
+                if f is None:
+                    raise InvalidInput(f"{node.id} has no {role.replace('_', ' ')} file")
+            else:
+                raise InvalidInput(f"{node.id} is a {node.kind}; link a dataset or file")
+            picked.append((node, f))
+        names = [f.name for _, f in picked]
+        out = []
+        for node, f in picked:
+            target = dest
+            if len(picked) > 1:
+                target = dest / (f"{node.id}_{f.name}" if names.count(f.name) > 1 else f.name)
+            src = adb.store.abspath(f.store_relpath)
+            if copy:
+                p = make_copy(src, f, target)
+                adb.audit(s, "link.copy", node.id, path=str(p))
+            else:
+                p = make_link(s, src, f, target, node.id)
+                adb.audit(s, "link.create", node.id, path=str(p))
+            out.append({"id": node.id, "file_id": f.id, "path": str(p.absolute()),
+                        "target": str(src), "copy": copy})
+    data = out[0] if len(out) == 1 else out
+
+    def human(d):
+        for r in d if isinstance(d, list) else [d]:
+            print(f"{r['path']} {'<=' if r['copy'] else '->'} {r['target']}")
+
+    emit(data, human)
 
 
 @app.command()
@@ -572,7 +625,7 @@ def ls(
         def human(d):
             table(
                 ["ID", "NAME", "FRAMES", "ATOMS", "ELEMENTS", "LABELS", "CREATED"],
-                [[i.id, i.name, i.n_frames, i.n_atoms_max, " ".join(i.elements),
+                [[i.id, i.label or i.name, i.n_frames, i.n_atoms_max, " ".join(i.elements),
                   "".join(x for x, f in (("E", i.has_energy), ("F", i.has_forces),
                                          ("S", i.has_stress)) if f),
                   i.created_at.strftime("%Y-%m-%d")] for i in d["items"]],
@@ -612,6 +665,8 @@ def annotate(
         "records; others become metadata.")] = [],
     note: str | None = None,
     name: str | None = None,
+    label: Annotated[str | None, typer.Option(
+        help="Short display name ('' clears it).")] = None,
     description: str | None = None,
     json_: JsonOpt = False,
 ):
@@ -636,6 +691,10 @@ def annotate(
             node.name = name
         if description:
             node.description = description
+        if label is not None:
+            from ..services.edit import edit_node
+
+            edit_node(s, node.id, label=label)
         adb.audit(s, "node.annotate", node.id, set=meta, note=note, name=name)
         data = {"id": node.id, "created": created}
     emit(data, lambda d: print(f"annotated {d['id']}"
@@ -788,6 +847,34 @@ def compare(
     emit(data, human)
 
 
+@app.command("suggest-labels")
+@handle_errors
+def suggest_labels(
+    all_: Annotated[bool, typer.Option("--all", help="Also datasets that have a label.")] = False,
+    apply: Annotated[bool, typer.Option(help="Write the suggested labels (audited).")] = False,
+    json_: JsonOpt = False,
+):
+    """Propose short labels by stripping what the auto chips already show (method, code,
+    model, counts) from the long names. Dry run unless --apply."""
+    from ..services import labels as lsvc
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        rows = lsvc.suggest_labels(s, only_missing=not all_)
+        if apply:
+            lsvc.apply_labels(s, {r["id"]: r["suggested"] for r in rows})
+
+    def human(rows):
+        table(["ID", "SUGGESTED LABEL", "CURRENT NAME"],
+              [[r["id"], r["suggested"], r["name"]] for r in rows])
+        print(f"{'applied' if apply else 'would set'} {len(rows)} labels"
+              + ("" if apply else " (dry run; edit individually with `atomdb annotate ID "
+                 "--label ...` or rerun with --apply)"))
+
+    emit(rows, human)
+
+
 @app.command()
 @handle_errors
 def embed(
@@ -812,6 +899,8 @@ def embed(
         print(r["note"])
         print(f"descriptor {r['descriptor']} ({r['n_features']} features), "
               f"PC1 {r['explained_variance'][0]:.1%}, PC2 {r['explained_variance'][1]:.1%}")
+        print(f"descriptors: {r['cache']['frames_cached']} frames from cache, "
+              f"{r['cache']['frames_computed']} computed")
         for d in r["datasets"]:
             pts = [p for p in r["points"] if p["dataset"] == d["id"]]
             if pts:
@@ -819,6 +908,54 @@ def embed(
 
                 c = np.array([[p["pc1"], p["pc2"]] for p in pts])
                 print(f"  {d['id']}  {len(pts)} frames  centroid ({c[:, 0].mean():+.2f}, "
+                      f"{c[:, 1].mean():+.2f})  spread {c.std(0).mean():.2f}")
+        if out:
+            print(f"points written to {out}")
+
+    emit(r, human)
+
+
+@app.command("embed-atoms")
+@handle_errors
+def embed_atoms(
+    node_ids: Annotated[list[str], typer.Argument(help="Dataset IDs.")],
+    descriptor: str = "mace-mp0-small",
+    element: Annotated[list[str], typer.Option(
+        "--element", "-e", help="Only atoms of this element (repeatable).")] = [],
+    max_frames: Annotated[int, typer.Option(help="Frames visited per dataset.")] = 200,
+    max_atoms: Annotated[int, typer.Option(help="Atoms kept per dataset.")] = 5000,
+    allow_large: Annotated[bool, typer.Option(help="Include MPtrj-sized datasets.")] = False,
+    seed: int = 0,
+    out: Annotated[Path | None, typer.Option(help="Write points as JSON.")] = None,
+    json_: JsonOpt = False,
+):
+    """EXPLORATORY: per-atom MLIP features + joint PCA (compare local environments)."""
+    from ..services.embedding import embed_atoms as do_embed
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        r = do_embed(adb, s, node_ids, descriptor, max_frames, max_atoms, element or None, seed,
+                     allow_large)
+    if out:
+        out.write_text(__import__("json").dumps(r))
+
+    def human(r):
+        import numpy as np
+
+        print(r["note"])
+        print(f"descriptor {r['descriptor']} ({r['n_features']} features), "
+              f"PC1 {r['explained_variance'][0]:.1%}, PC2 {r['explained_variance'][1]:.1%}")
+        print(f"descriptors: {r['cache']['frames_cached']} frames from cache, "
+              f"{r['cache']['frames_computed']} computed")
+        for sk in r["skipped"]:
+            print(f"  skipped {sk['id']}: {sk['reason']}")
+        for d in r["datasets"]:
+            print(f"  {d['id']}  {d['label'] or d['name']}")
+            for el in d["elements"]:
+                c = np.array([[p["pc1"], p["pc2"]] for p in r["points"]
+                              if p["dataset"] == d["id"] and p["element"] == el])
+                print(f"    {el:>2}  {len(c):5d} atoms  centroid ({c[:, 0].mean():+.2f}, "
                       f"{c[:, 1].mean():+.2f})  spread {c.std(0).mean():.2f}")
         if out:
             print(f"points written to {out}")
@@ -872,7 +1009,65 @@ def descriptors(json_: JsonOpt = False):
     _json(json_)
     emit(list_descriptors(), lambda ds: table(
         ["NAME", "AVAILABLE", "DESCRIPTION"],
-        [[d["name"], "yes" if d["available"] else "no (extra)", d["description"]] for d in ds]))
+        [[d["name"] + (" (per atom)" if d["per_atom"] else ""),
+          "yes" if d["available"] else "no (extra)", d["description"]] for d in ds]))
+
+
+@app.command()
+@handle_errors
+def cache(
+    clear: Annotated[bool, typer.Option("--clear", help="Delete cached data.")] = False,
+    only: Annotated[list[str], typer.Option(
+        "--only", help="Limit --clear to one cache (descriptors, stats; repeatable).")] = [],
+    json_: JsonOpt = False,
+):
+    """Show (or --clear) the derived-data caches (descriptor vectors, statistics)."""
+    from ..services import desccache
+
+    _json(json_)
+    adb = open_db()
+    r = desccache.clear(adb, only or None) if clear else desccache.usage(adb)
+
+    def human(r):
+        rows = r["removed"] if clear else r["caches"]
+        table(["CACHE", "FILES", "SIZE (MB)"],
+              [[k, v["files"], f"{v['bytes'] / 1e6:.1f}"] for k, v in rows.items()])
+        print(("removed from " if clear else "in ") + r["path"])
+
+    emit(r, human)
+
+
+@app.command()
+@handle_errors
+def remove(
+    node_id: str,
+    reason: Annotated[str | None, typer.Option(help="Why (kept with the record).")] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Do not ask for confirmation.")] = False,
+    json_: JsonOpt = False,
+):
+    """Delete a dataset's frames and store files; keep its record and provenance.
+
+    The node stays (status "removed", with checksums and original paths), so datasets
+    derived from it keep their lineage. Not undoable except by importing the file again."""
+    from ..services import remove as rsvc
+
+    _json(json_)
+    adb = open_db()
+    with adb.session() as s:
+        p = rsvc.plan(s, node_id)
+    if not yes and not state.json:
+        print(f"{p['dataset']}  {p['name']}  ({p['n_frames']} frames)")
+        for f in p["files"]:
+            print(f"  delete {f['id']} {f['name']}  {f['size'] / 1e9:.2f} GB")
+        if not typer.confirm("Delete this data (the record is kept)?"):
+            raise typer.Exit(1)
+    with adb.session() as s:
+        r = rsvc.remove_dataset(adb, s, node_id, reason)
+    before, after = rsvc.vacuum(adb)
+    r |= {"db_bytes_before": before, "db_bytes_after": after}
+    emit(r, lambda r: print(
+        f"removed {r['dataset']}: {r['bytes'] / 1e9:.2f} GB of files deleted; database "
+        f"{r['db_bytes_before'] / 1e6:.0f} MB -> {r['db_bytes_after'] / 1e6:.0f} MB"))
 
 
 @app.command()
@@ -960,15 +1155,26 @@ def schema(json_: JsonOpt = False):
 
 @app.command()
 @handle_errors
-def reindex(json_: JsonOpt = False):
-    """Rebuild the search index (normally maintained automatically)."""
+def reindex(
+    structure: Annotated[bool, typer.Option(
+        "--structure", help="Re-read pbc/cell/arrays of all datasets, not only missing ones.")] = False,
+    json_: JsonOpt = False,
+):
+    """Rebuild the search index (normally maintained automatically).
+
+    First fills the per-dataset structure summary (pbc, cells, per-atom arrays) from the
+    stored H5MD where it is missing, e.g. for datasets imported by older versions."""
     from ..services.facets import rebuild_all
+    from ..services.structure import backfill
 
     _json(json_)
     adb = open_db()
     with adb.session() as s:
+        filled = backfill(adb, s, force=structure)
         n = rebuild_all(s)
-    emit({"datasets": n}, lambda d: print(f"reindexed {d['datasets']} datasets"))
+    emit({"datasets": n, "structure_filled": filled},
+         lambda d: print(f"structure summary read for {len(d['structure_filled'])} datasets; "
+                         f"reindexed {d['datasets']} datasets"))
 
 
 @app.command()

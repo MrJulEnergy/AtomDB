@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
@@ -85,6 +86,22 @@ def test_cli_link_and_whatis(home, data_dir, tmp_path):
     assert w["exact_match"]["datasets"][0]["id"] == ds_id
 
 
+def test_cli_link_many_and_copy(home, data_dir, tmp_path):
+    run("init")
+    ids = [json.loads(run("import", str(data_dir / f), "--json").output)["data"][0]["dataset"]["id"]
+           for f in ("kcl_labeled.extxyz", "kcl.pdb")]
+    out = tmp_path / "shared"
+    res = run("link", *ids, str(out), "--json")
+    assert res.exit_code == 0, res.output
+    paths = [Path(r["path"]) for r in json.loads(res.output)["data"]]
+    assert len(paths) == 2 and all(p.is_symlink() and p.parent == out for p in paths)
+    res = run("link", "--copy", *ids, str(tmp_path / "copies"), "--json")
+    assert res.exit_code == 0, res.output
+    copies = [Path(r["path"]) for r in json.loads(res.output)["data"]]
+    assert all(not p.is_symlink() and p.read_bytes() == q.resolve().read_bytes() for p, q in zip(copies, paths))
+    copies[0].write_bytes(b"editable")  # a copy is independent of the store
+
+
 def test_cli_provenance_workflow(home, data_dir, tmp_path):
     """The workflow from the spec, entirely through the CLI with JSON output."""
     run("init")
@@ -134,6 +151,11 @@ def test_api_provenance_and_search(adb, data_dir):
     r = c.get("/api/v1/search", params={"q": "r2scan+d4 el:K,Cl"}).json()
     assert r["total"] == 1 and r["items"][0]["extra"]["functional"] == ["r2SCAN"]
     assert c.get("/api/v1/datasets", params={"q": "functional:pbe"}).json()["total"] == 0
+    cats = c.get("/api/v1/categories").json()
+    from atomdb.services.facets import CATEGORY_KEYS
+
+    assert set(cats) == set(CATEGORY_KEYS)
+    assert cats["dft_code"] == [{"value": "CP2K", "count": 1}]
     els = c.get("/api/v1/elements").json()
     assert {e["symbol"] for e in els["elements"]} == {"H", "O", "Cl", "K"}
     fr = c.get("/api/v1/frames", params=[("all", "K"), ("all", "Cl")]).json()
