@@ -49,7 +49,7 @@ def main(home: Path) -> None:
                             "collective_variables": [{"label": "d1", "action": "DISTANCE",
                                                       "ATOMS": "1,2"}],
                             "bias": {"PACE": 500, "HEIGHT": 1.2, "BIASFACTOR": 10}},
-                  workdir="/work/jpeters/kcl/md_400K")
+                  workdir="/work/user/kcl/md_400K")
     plan = plan_run(run, cluster="hawk")
     res = execute_run(adb, plan)
     sel_ds = res["datasets"]["inputs"][0]

@@ -1,8 +1,8 @@
  **** **** ******  **  PROGRAM STARTED AT               2026-08-17 09:12:01.123
  ***** ** ***  *** **   PROGRAM STARTED ON                          node0421
- **    ****   ******    PROGRAM STARTED BY                           jpeters
+ **    ****   ******    PROGRAM STARTED BY                           user
  ***** **    ** ** **   PROGRAM PROCESS ID                            123456
-  **** **  *******  **  PROGRAM STARTED IN /scratch/jpeters/kcl/run_042
+  **** **  *******  **  PROGRAM STARTED IN /scratch/user/kcl/run_042
 
  CP2K| version string:                                      CP2K version 2025.1
  CP2K| source code revision number:                                  git:abc1234

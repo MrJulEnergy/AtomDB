@@ -115,7 +115,7 @@ SUBMIT = """\
 #SBATCH --cpus-per-task=1
 #SBATCH --time=24:00:00
 #SBATCH --mem=200G
-#SBATCH -A icp_kcl
+#SBATCH -A my_account
 module load cp2k/2025.1
 export OMP_NUM_THREADS=1
 # many jobs of this script run concurrently; laufband hands out frames
@@ -125,9 +125,9 @@ srun python label.py --input structures.extxyz --output labeled.h5
 CP2K_OUT = """\
  **** **** ******  **  PROGRAM STARTED AT               2026-08-17 09:12:01.123
  ***** ** ***  *** **   PROGRAM STARTED ON                          node0421
- **    ****   ******    PROGRAM STARTED BY                           jpeters
+ **    ****   ******    PROGRAM STARTED BY                           user
  ***** **    ** ** **   PROGRAM PROCESS ID                            123456
-  **** **  *******  **  PROGRAM STARTED IN /scratch/jpeters/kcl/run_042
+  **** **  *******  **  PROGRAM STARTED IN /scratch/user/kcl/run_042
 
  CP2K| version string:                                      CP2K version 2025.1
  CP2K| source code revision number:                                  git:abc1234

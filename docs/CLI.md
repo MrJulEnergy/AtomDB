@@ -79,8 +79,8 @@ run that generated the file; `--source DIR` its working directory; `--sampled-fr
 `--set key=value` other metadata; `--note TEXT`. Applied in the same transaction.
 
 ```bash
-atomdb import /work/jpeters/project/run_042/output.extxyz \
-    --temperature 400 --model mace-mh-1 --source /work/jpeters/project/run_042/
+atomdb import /work/user/project/run_042/output.extxyz \
+    --temperature 400 --model mace-mh-1 --source /work/user/project/run_042/
 ```
 
 ### `atomdb import-run DIR... [--yes] [--cluster NAME] [--type dft|md|other] [--input DS] [--sampled-from DS] [--model M] [--exclude GLOB]`

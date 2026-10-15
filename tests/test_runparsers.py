@@ -115,7 +115,7 @@ def test_slurm_script(data_dir):
     from atomdb.runparsers.slurm import parse_job_output, parse_script
 
     s = parse_script((data_dir / "run_cp2k_laufband/submit.sh").read_text())
-    assert s["partition"] == "cpu" and s["account"] == "icp_kcl"
+    assert s["partition"] == "cpu" and s["account"] == "my_account"
     assert s["n_cpus"] == 64 and s["time_limit"] == "24:00:00" and s["mem"] == "200G"
     assert s["modules"] == ["cp2k/2025.1"]
     j = parse_job_output("slurm-4819240.out", "CANCELLED AT ... DUE TO TIME LIMIT")

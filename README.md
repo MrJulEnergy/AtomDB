@@ -12,7 +12,7 @@ MLIP datasets and models — with **provenance as first-class, graph-structured 
 ```bash
 uv sync                                   # + `--extra md` (DCD/XTC/TRR), `--extra descriptors` (SOAP)
 (cd frontend && npm install && npm run build)   # web UI (once)
-export ATOMDB_HOME=/work/jpeters/atomdb_store   # data store, outside the repo (default: /work/$USER/atomdb_store)
+export ATOMDB_HOME=/work/user/atomdb_store   # data store, outside the repo (default: /work/$USER/atomdb_store)
 uv run atomdb init
 uv run atomdb serve                        # http://127.0.0.1:8765
 ```
@@ -23,14 +23,14 @@ Try it on a demo store: `uv run python scripts/make_demo.py /tmp/atomdb_demo && 
 
 ```bash
 # existing data: scan (read-only) → review plan → import
-atomdb scan /work/jpeters/Master/mptraj --plan plan.yaml
+atomdb scan /work/user/Master/mptraj --plan plan.yaml
 atomdb import-plan plan.yaml
 atomdb suggest                              # relations implied by shared structures
 
 # new data with provenance
 atomdb import run_042/output.extxyz --temperature 400 --model MACE-MH-1 --source run_042/
-atomdb import-run /work/jpeters/runs/run_042 --cluster hawk          # dry run
-atomdb import-run /work/jpeters/runs/run_042 --cluster hawk --yes    # Slurm + CP2K + PLUMED → records
+atomdb import-run /work/user/runs/run_042 --cluster hawk          # dry run
+atomdb import-run /work/user/runs/run_042 --cluster hawk --yes    # Slurm + CP2K + PLUMED → records
 
 # questions
 atomdb whatis mystery.h5

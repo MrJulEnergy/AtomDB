@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --time=24:00:00
 #SBATCH --mem=200G
-#SBATCH -A icp_kcl
+#SBATCH -A my_account
 module load cp2k/2025.1
 export OMP_NUM_THREADS=1
 # many jobs of this script run concurrently; laufband hands out frames

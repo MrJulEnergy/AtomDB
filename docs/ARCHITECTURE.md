@@ -2,10 +2,10 @@
 
 ## Context
 
-Expensive atomistic data (r2SCAN DFT labels from HPC, MLIP-driven MD trajectories, training sets) currently lives scattered across project folders (e.g. `/work/jpeters/Master/{mptraj,KCl_vectra,...}/nodes/*/frames.h5`), with provenance only implicit in directory names and scripts. Goal: a local-first database + CLI + web UI where **provenance is first-class, graph-structured data**, so that any file (even an unfamiliar H5MD found months later) can be traced back to the MD run, model, DFT settings and HPC job that produced it — and forward to everything derived from it.
+Expensive atomistic data (r2SCAN DFT labels from HPC, MLIP-driven MD trajectories, training sets) currently lives scattered across project folders (e.g. `/work/user/Master/{mptraj,KCl_vectra,...}/nodes/*/frames.h5`), with provenance only implicit in directory names and scripts. Goal: a local-first database + CLI + web UI where **provenance is first-class, graph-structured data**, so that any file (even an unfamiliar H5MD found months later) can be traced back to the MD run, model, DFT settings and HPC job that produced it — and forward to everything derived from it.
 
 ### Environment findings
-- `/work/jpeters/Master/dataset_folder` is empty, not a git repo → becomes the **code repository**.
+- `/work/user/atomdb` is empty, not a git repo → becomes the **code repository**.
 - Python 3.12 available via `uv` (system 3.14 too new for parts of the scientific stack); Node 24 + npm; git (user configured); sqlite3; zstd; 16 cores, 61 GB RAM.
 - Existing data is **znh5md-written H5MD** (`h5md/creator = znh5md 0.4.8`): `particles/atoms/{position,species,force,box}`, `observables/atoms/{potential_energy,<info keys>}`, `ASE_ENTRY_ORIGIN` attrs (info/arrays/calc), NaN padding for variable atom counts. → Our H5MD layer must read/write exactly this dialect.
 - HPC workflow (user decision): **import only happens here**. Many `sbatch` jobs (via laufband) write into the *same* output file; run directories are copied back and imported locally. No DB access from the cluster.
@@ -141,7 +141,7 @@ Normalization of vocabulary: `vocab_alias(field, alias, canonical)` maps `R2SCAN
 ## 5. File storage architecture
 
 ```
-$ATOMDB_HOME  (default /work/jpeters/atomdb_store — outside the git repo; configurable)
+$ATOMDB_HOME  (default /work/user/atomdb_store — outside the git repo; configurable)
 ├── atomdb.sqlite          (+ -wal/-shm)
 ├── config.toml            (store settings, vocab overrides, UI port)
 ├── files/sha256/ab/ab12…  (content-addressed, chmod 0444, original bytes untouched)
@@ -174,7 +174,7 @@ Pluggable `RunParser`s inspect the directory and propose records (shown as a dry
 
 ## 6b. Adding data that already exists (retroactive / legacy import) — first-class
 
-Most valuable data already exists (e.g. `/work/jpeters/Master/*/nodes/*/frames.h5`, old run dirs, checkpoints). The design must handle data whose provenance is partly known, unknown, or only discoverable later:
+Most valuable data already exists (e.g. `/work/user/Master/*/nodes/*/frames.h5`, old run dirs, checkpoints). The design must handle data whose provenance is partly known, unknown, or only discoverable later:
 
 - **Discovery**: `atomdb scan DIR [--recursive] [--exclude .venv,node_modules]` walks a tree read-only, sniffs atomistic files, model checkpoints and run dirs, computes sha256, and reports: new / already in DB (by checksum) / probably duplicate (by frame fingerprints). Output is an editable **import plan** (YAML/CSV: path, proposed name, format, tags, metadata, parent links).
 - **Batch import**: `atomdb import-plan plan.yaml [--dry-run]` imports everything in the plan in one go; per-file metadata (temperature, model, functional, sampled-from, notes) can be filled in the plan before committing. Same for many run dirs: `atomdb import-run DIR1 DIR2 …`.
@@ -312,15 +312,15 @@ dataset_folder/                      (git repo = code)
 ├── tests/ (data/, make_fixtures.py, unit/, integration/, api/, cli/)
 └── scripts/
 ```
-Data root (`$ATOMDB_HOME`, default `/work/jpeters/atomdb_store`) lives outside the repo.
+Data root (`$ATOMDB_HOME`, default `/work/user/atomdb_store`) lives outside the repo.
 
 ## Verification (per phase and end-to-end)
 
 - `uv run pytest` green after every commit; `uv run atomdb serve` starts and UI loads.
 - End-to-end acceptance script (`tests/integration/test_acceptance.py` + manual): import an MD trajectory (extxyz) with `--model MACE-MH-1 --temperature 400`; import a fake CP2K run dir with `--sampled-from` that trajectory; create a training run → model; restart the server/process; then
   `atomdb provenance <DFT dataset> --up` shows DFT → sampling → MD → MACE-MH-1, `--down` from the MD shows the derived datasets/model; `atomdb search "functional:r2scan el:K,Cl"` finds it; `atomdb whatis` on a copied/renamed H5MD returns the dataset; `atomdb validate --all` clean; `atomdb backup` + `restore` into fresh home reproduces everything.
-- Legacy-data acceptance: `atomdb scan /work/jpeters/Master/mptraj --exclude .venv` → import plan → `import-plan` → re-scan reports everything as "already in DB"; add a placeholder parent and later merge it; fingerprint suggestion links `train_atoms.h5` frames to the dataset they were selected from.
-- Try it on a real file: `/work/jpeters/Master/mptraj/nodes/Train/Apax/train_atoms.h5` (read-only import, original untouched — verify sha256 before/after).
+- Legacy-data acceptance: `atomdb scan /work/user/Master/mptraj --exclude .venv` → import plan → `import-plan` → re-scan reports everything as "already in DB"; add a placeholder parent and later merge it; fingerprint suggestion links `train_atoms.h5` frames to the dataset they were selected from.
+- Try it on a real file: `/work/user/Master/mptraj/nodes/Train/Apax/train_atoms.h5` (read-only import, original untouched — verify sha256 before/after).
 
 
 

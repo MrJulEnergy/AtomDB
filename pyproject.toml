@@ -2,7 +2,9 @@
 name = "atomdb"
 version = "0.1.0"
 description = "Local-first database for atomistic data (MD trajectories, DFT/MLIP datasets) with first-class provenance"
-authors = [{ name = "Julian Peters", email = "julian.peters@icp.uni-stuttgart.de" }]
+authors = [{ name = "Julian Peters", email = "108301472+MrJulEnergy@users.noreply.github.com" }]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "sqlalchemy>=2.0",
